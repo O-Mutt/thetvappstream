@@ -1,6 +1,7 @@
 const express = require('express');
 const { getChannelLogos } = require('./utils');
 const ChannelManager = require('./ChannelManager');
+const { baseUrlFor } = require('./baseUrl');
 const { PORT, PUBLIC_BASE_URL } = require('./config');
 
 const app = express();
@@ -10,16 +11,11 @@ app.set('trust proxy', true);
 
 const channelManager = new ChannelManager();
 
-function baseUrlFor(req) {
-  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL.replace(/\/$/, '');
-  return `${req.protocol}://${req.get('host')}`;
-}
-
 app.get('/channels.m3u', async (req, res) => {
   try {
     const channels = await channelManager.listChannels();
     const channelLogos = await getChannelLogos();
-    const base = baseUrlFor(req);
+    const base = baseUrlFor(req, PUBLIC_BASE_URL);
     let m3u = '#EXTM3U';
     Object.entries(channels).forEach(([name, chid], i) => {
       const logo = channelLogos.channels.find(c => c.name === name)?.logo || '';

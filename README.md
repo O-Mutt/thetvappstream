@@ -1,94 +1,58 @@
 # TheTvApp StreamScraper
 
-TheTvApp StreamScraper is an innovative server application built on Express, designed to streamline access to HLS live TV streams by dynamically scraping and maintaining updated stream URLs from the `thetvapp.to` website. It combines web scraping with automated browser interactions to offer an efficient and user-friendly way to enjoy live TV channels.
+An Express server that scrapes thetvapp.to and serves an M3U playlist plus an XMLTV electronic program guide. Designed to plug straight into IPTV middleware (Dispatcharr, Threadfin, xTeVe, etc.) and from there into Plex Live TV / Jellyfin / VLC.
 
-## Features
+## Endpoints
 
-- **HLS Streaming**: Specialized in fetching HLS (HTTP Live Streaming) links for high-quality TV streaming.
-- **Dynamic Channel Listing**: Automatically retrieves and refreshes the list of available TV channels from `thetvapp.to`.
-- **Automated Token Retrieval**: Uses Puppeteer to automate the process of token management, ensuring uninterrupted access to streams.
-- **Efficient Caching**: Implements caching for both channel listings and HLS stream URLs, optimizing performance and reducing load.
-- **Quality Selection**: Prioritizes high-bitrate HLS streams when available, delivering superior video quality.
-- **Stream URL Auto-Refresh**: Periodically updates stream URLs to keep them active, ensuring consistent access to TV channels.
-- **M3U Playlist Integration**: Generates and serves M3U playlists, making it easy to use with various media players that support streaming.
+| Path             | What it returns                                                                                                                                      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/channels.m3u`  | M3U playlist of all available channels. Each entry has `tvg-id` set to the channel ID so it pairs automatically with the EPG.                        |
+| `/epg.xml`       | XMLTV programme guide (~118 channels, ~10k+ programmes, refreshed every 6h). Returns `503` for the brief window between startup and the first build. |
+| `/channel/:chid` | Resolves to the current signed HLS m3u8 URL and `302` redirects to it. Each call gets a fresh token, so URLs in the playlist never go stale.         |
+| `/healthz`       | Liveness probe (`200 ok`). The Docker image's HEALTHCHECK uses this.                                                                                 |
 
-## Getting Started
+## Configuration (env vars)
 
-### Prerequisites
+| Var               | Default               | Notes                                                                                                                                                                                                                                                                         |
+| ----------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`            | `5000`                | HTTP port the server binds to.                                                                                                                                                                                                                                                |
+| `TV_URL`          | `https://thetvapp.to` | Upstream site root.                                                                                                                                                                                                                                                           |
+| `PUBLIC_BASE_URL` | _(unset)_             | Base URL emitted in the M3U (e.g. `https://thetvapp-proxy.example.com`). When unset, derived from the request's `Host`/`X-Forwarded-*` headers — works as long as the M3U is fetched at a URL downstream players can also reach. Strongly recommended behind a reverse proxy. |
 
-- Node.js (v14 or later recommended)
-- npm (v6 or later)
-- Docker (if running with Docker)
-
-### Installation
-
-1. Pull the Docker image from Docker Hub:
+## Running with Docker
 
 ```bash
-docker pull habitual69/thetvappstream
+docker run -d \
+  --name thetvappstream \
+  --restart unless-stopped \
+  -p 5000:5000 \
+  -e PUBLIC_BASE_URL=https://thetvapp-proxy.example.com \
+  ghcr.io/o-mutt/thetvappstream:latest
 ```
 
-### Usage
+`--network host` also works and avoids the need for `PUBLIC_BASE_URL` if the host's IP is what you want in the playlist URLs.
 
-#### Running with Docker
+## Wiring into Plex Live TV
 
-To run the server using Docker in host network mode:
+Both endpoints are independent — most middleware wants both as separate sources:
 
-```bash
-docker run --network host habitual69/thetvappstream
-```
+- M3U source: `https://your-host/channels.m3u`
+- XMLTV source: `https://your-host/epg.xml`
 
-Upon starting, the server will fetch the necessary token and channel listings. Access the channel playlist via `http://localhost:5000/channels.m3u` and individual HLS stream URLs by visiting `http://localhost:5000/channel/{channelID}`.
-
-#### Running without Docker
-
-1. Clone the repository:
-
-```bash
-git clone https://github.com/habitual69/thetvappstream.git
-cd thetvappstream
-```
-
-2. Install the dependencies:
-
-```bash
-npm install
-```
-
-3. Set up environment variables:
-
-Rename the `.env_example` file to `.env` and adjust the variables as needed for your setup.
-
-```plaintext
-PORT=5000
-TV_URL=https://thetvapp.to
-```
-
-4. To run the server:
-
-```bash
-node app.js
-```
-
-Upon starting, the server will fetch the necessary token and channel listings. Access the channel playlist via `http://localhost:5000/channels.m3u` and individual HLS stream URLs by visiting `http://localhost:5000/channel/{channelID}`.
-
-## Note
-
-If you are deploying this on a server using Docker, make sure to use a reverse proxy like Nginx, Apache, or Cloudflare tunnel to serve the stream over HTTPS or set the Docker network mode to host.
+`tvg-id` in the M3U matches `<channel id>` in the XMLTV by construction, so middleware should auto-pair channels to programmes with no manual mapping.
 
 ## Development
 
-Contributions to TheTvApp StreamScraper are welcome! Feel free to fork, clone, or submit pull requests to enhance its features or performance.
+```bash
+npm install
+npm test           # unit tests (node:test)
+npm run lint       # ESLint
+npm run format     # Prettier
+node app.js
+```
 
-## License
-
-This project is released under the MIT License - see the LICENSE.md file for details.
-
-## Acknowledgments
-
-- A big thank you to the developers of Express, Axios, Puppeteer, Cheerio, and all other libraries that have contributed to this project.
-- Inspired by the streaming community's need for more accessible and high-quality TV streaming solutions.
+CI runs lint + format + tests on every PR (`.github/workflows/lint.yml`); the Docker image is built and pushed to GHCR on merges to `main` (`.github/workflows/docker.yml`).
 
 ## Disclaimer
 
-> TheTvApp StreamScraper is not affiliated with `thetvapp.to` and is intended for educational and personal use only. Please respect the terms of service of the website and use this application responsibly.
+> Not affiliated with `thetvapp.to`. Intended for personal use only — respect the upstream site's terms of service.
