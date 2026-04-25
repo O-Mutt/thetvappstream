@@ -49,7 +49,8 @@ class ChannelManager {
       const r2 = await this.client.get(BOOTSTRAP_PAGE, {
         headers: { Cookie: this._cookieHeader() },
       });
-      if (r2.status !== 200) throw new Error(`session bootstrap GET ${BOOTSTRAP_PAGE} failed: ${r2.status}`);
+      if (r2.status !== 200)
+        throw new Error(`session bootstrap GET ${BOOTSTRAP_PAGE} failed: ${r2.status}`);
       this._ingestCookies(r2.headers['set-cookie']);
 
       console.log(`[session] established (${this.cookieJar.length} cookies)`);

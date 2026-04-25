@@ -4,7 +4,10 @@
   "description": "HLS scraper for thetvapp.to — generates M3U playlists and per-channel signed stream URLs.",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "engines": {
     "node": ">=24.0.0"
@@ -15,5 +18,10 @@
     "cheerio": "^1.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "prettier": "^3.3.3"
   }
 }
