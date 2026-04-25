@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { encodeXML } = require('entities');
 const { TV_URL } = require('./config');
 
 const UA =
@@ -17,6 +18,10 @@ class ChannelManager {
     });
     this.cookieJar = [];
     this.channelsCache = {}; // name -> chid
+    this.guideIds = {}; // chid -> numeric guide-JSON id from the channel page
+    this.epgXml = null;
+    this.epgLastRefresh = 0;
+    this.epgRefreshing = null;
     this.sessionPromise = null;
   }
 
@@ -103,6 +108,7 @@ class ChannelManager {
     });
 
     const chids = {};
+    const guideIds = {};
     await this._runWithConcurrency(links, 4, async ({ href, name }) => {
       try {
         const r = await this._getWithRetry(href);
@@ -110,8 +116,12 @@ class ChannelManager {
           console.error(`listChannels: ${name}: ${href} -> ${r.status}`);
           return;
         }
-        const m = /<div id="stream_name"\s+name="([^"]+)"/.exec(r.data || '');
-        if (m) chids[name] = m[1];
+        const body = r.data || '';
+        const m = /<div id="stream_name"\s+name="([^"]+)"/.exec(body);
+        if (!m) return;
+        chids[name] = m[1];
+        const gm = /thetvapp\.to\/json\/(\d+)\.json/.exec(body);
+        if (gm) guideIds[m[1]] = gm[1];
       } catch (e) {
         console.error(`listChannels: ${name}: ${e.message}`);
       }
@@ -122,8 +132,68 @@ class ChannelManager {
         .sort()
         .map(k => [k, chids[k]]),
     );
-    console.log(`[channels] loaded ${Object.keys(this.channelsCache).length}`);
+    this.guideIds = guideIds;
+    console.log(
+      `[channels] loaded ${Object.keys(this.channelsCache).length} ` +
+        `(${Object.keys(guideIds).length} with guide IDs)`,
+    );
     return this.channelsCache;
+  }
+
+  async refreshEpg() {
+    if (this.epgRefreshing) return this.epgRefreshing;
+    this.epgRefreshing = (async () => {
+      const channels = await this.listChannels();
+      const items = Object.entries(channels)
+        .filter(([, chid]) => this.guideIds[chid])
+        .map(([name, chid]) => ({ name, chid, guideId: this.guideIds[chid] }));
+
+      const programmes = {};
+      await this._runWithConcurrency(items, 4, async item => {
+        try {
+          const r = await this._getWithRetry(`/json/${item.guideId}.json`);
+          if (r.status === 200 && Array.isArray(r.data)) {
+            programmes[item.chid] = r.data;
+          }
+        } catch (e) {
+          console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
+        }
+      });
+
+      const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
+      lines.push('<tv generator-info-name="thetvappstream">');
+      for (const it of items) {
+        lines.push(
+          `  <channel id="${encodeXML(it.chid)}"><display-name>${encodeXML(it.name)}</display-name></channel>`,
+        );
+      }
+      let progCount = 0;
+      for (const it of items) {
+        for (const p of programmes[it.chid] || []) {
+          if (!p || !p.title || !p.startTime || !p.endTime) continue;
+          lines.push(
+            `  <programme channel="${encodeXML(it.chid)}" start="${formatXmltvTime(p.startTime)}" stop="${formatXmltvTime(p.endTime)}">`,
+          );
+          lines.push(`    <title>${encodeXML(p.title)}</title>`);
+          if (p.episodeTitle) lines.push(`    <sub-title>${encodeXML(p.episodeTitle)}</sub-title>`);
+          lines.push('  </programme>');
+          progCount++;
+        }
+      }
+      lines.push('</tv>');
+      this.epgXml = lines.join('\n') + '\n';
+      this.epgLastRefresh = Date.now();
+      console.log(`[epg] refreshed: ${items.length} channels, ${progCount} programmes`);
+    })();
+    try {
+      await this.epgRefreshing;
+    } finally {
+      this.epgRefreshing = null;
+    }
+  }
+
+  getEpgXml() {
+    return this.epgXml;
   }
 
   async getStream(chid) {
@@ -144,6 +214,15 @@ class ChannelManager {
     if (!body || !body.url) throw new Error('no url in token response');
     return body.url;
   }
+}
+
+function formatXmltvTime(unixSeconds) {
+  const d = new Date(unixSeconds * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  return (
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())} +0000`
+  );
 }
 
 module.exports = ChannelManager;
