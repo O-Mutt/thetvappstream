@@ -1,0 +1,4 @@
+node_modules/
+.claude-flow/
+package-lock.json
+channelLogos.json

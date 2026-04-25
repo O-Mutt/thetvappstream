@@ -1,0 +1,49 @@
+name: 'Lint & Format'
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: 'Lint & Format'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax check
+        run: |
+          shopt -s nullglob
+          for f in app.js ChannelManager.js config.js utils.js; do
+            node --check "$f"
+          done
+
+      - name: ESLint
+        run: npx --no-install eslint .
+
+      - name: Prettier (check)
+        run: npx --no-install prettier --check .
+
+      - name: Lint workflows (actionlint)
+        run: |
+          curl -sL "$(curl -sL https://api.github.com/repos/rhysd/actionlint/releases/latest \
+            | grep -oE 'https://[^"]*actionlint_[^"]*_linux_amd64\.tar\.gz' \
+            | head -1)" | tar xz -C /usr/local/bin actionlint
+          actionlint -ignore 'shellcheck reported issue' .github/workflows/*.yml
