@@ -1,4 +1,4 @@
-name: 'Lint & Format'
+name: 'Lint, Format & Test'
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   lint:
-    name: 'Lint & Format'
+    name: 'Lint, Format & Test'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -31,7 +31,7 @@ jobs:
       - name: Syntax check
         run: |
           shopt -s nullglob
-          for f in app.js ChannelManager.js config.js utils.js; do
+          for f in app.js ChannelManager.js config.js utils.js baseUrl.js; do
             node --check "$f"
           done
 
@@ -40,6 +40,9 @@ jobs:
 
       - name: Prettier (check)
         run: npx --no-install prettier --check .
+
+      - name: Unit tests
+        run: npm test
 
       - name: Lint workflows (actionlint)
         run: |

@@ -9,6 +9,9 @@ const UA =
 
 const BOOTSTRAP_PAGE = '/tv/ae-live-stream/';
 
+const STREAM_NAME_RE = /<div id="stream_name"\s+name="([^"]+)"/;
+const GUIDE_JSON_RE = /thetvapp\.to\/json\/(\d+)\.json/;
+
 class ChannelManager {
   constructor() {
     this.client = axios.create({
@@ -80,19 +83,6 @@ class ChannelManager {
     }
   }
 
-  async _runWithConcurrency(items, limit, worker) {
-    const results = [];
-    let i = 0;
-    const runners = Array.from({ length: limit }, async () => {
-      while (i < items.length) {
-        const idx = i++;
-        results[idx] = await worker(items[idx], idx);
-      }
-    });
-    await Promise.all(runners);
-    return results;
-  }
-
   async listChannels() {
     if (Object.keys(this.channelsCache).length > 0) return this.channelsCache;
     await this.ensureSession();
@@ -109,19 +99,17 @@ class ChannelManager {
 
     const chids = {};
     const guideIds = {};
-    await this._runWithConcurrency(links, 4, async ({ href, name }) => {
+    await runWithConcurrency(links, 4, async ({ href, name }) => {
       try {
         const r = await this._getWithRetry(href);
         if (r.status !== 200) {
           console.error(`listChannels: ${name}: ${href} -> ${r.status}`);
           return;
         }
-        const body = r.data || '';
-        const m = /<div id="stream_name"\s+name="([^"]+)"/.exec(body);
-        if (!m) return;
-        chids[name] = m[1];
-        const gm = /thetvapp\.to\/json\/(\d+)\.json/.exec(body);
-        if (gm) guideIds[m[1]] = gm[1];
+        const parsed = parseChannelPage(r.data || '');
+        if (!parsed.chid) return;
+        chids[name] = parsed.chid;
+        if (parsed.guideId) guideIds[parsed.chid] = parsed.guideId;
       } catch (e) {
         console.error(`listChannels: ${name}: ${e.message}`);
       }
@@ -148,42 +136,22 @@ class ChannelManager {
         .filter(([, chid]) => this.guideIds[chid])
         .map(([name, chid]) => ({ name, chid, guideId: this.guideIds[chid] }));
 
-      const programmes = {};
-      await this._runWithConcurrency(items, 4, async item => {
+      const programmesByChid = {};
+      await runWithConcurrency(items, 4, async item => {
         try {
           const r = await this._getWithRetry(`/json/${item.guideId}.json`);
           if (r.status === 200 && Array.isArray(r.data)) {
-            programmes[item.chid] = r.data;
+            programmesByChid[item.chid] = r.data;
           }
         } catch (e) {
           console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
         }
       });
 
-      const lines = ['<?xml version="1.0" encoding="UTF-8"?>'];
-      lines.push('<tv generator-info-name="thetvappstream">');
-      for (const it of items) {
-        lines.push(
-          `  <channel id="${encodeXML(it.chid)}"><display-name>${encodeXML(it.name)}</display-name></channel>`,
-        );
-      }
-      let progCount = 0;
-      for (const it of items) {
-        for (const p of programmes[it.chid] || []) {
-          if (!p || !p.title || !p.startTime || !p.endTime) continue;
-          lines.push(
-            `  <programme channel="${encodeXML(it.chid)}" start="${formatXmltvTime(p.startTime)}" stop="${formatXmltvTime(p.endTime)}">`,
-          );
-          lines.push(`    <title>${encodeXML(p.title)}</title>`);
-          if (p.episodeTitle) lines.push(`    <sub-title>${encodeXML(p.episodeTitle)}</sub-title>`);
-          lines.push('  </programme>');
-          progCount++;
-        }
-      }
-      lines.push('</tv>');
-      this.epgXml = lines.join('\n') + '\n';
+      const { xml, programmeCount } = buildXmltv(items, programmesByChid);
+      this.epgXml = xml;
       this.epgLastRefresh = Date.now();
-      console.log(`[epg] refreshed: ${items.length} channels, ${progCount} programmes`);
+      console.log(`[epg] refreshed: ${items.length} channels, ${programmeCount} programmes`);
     })();
     try {
       await this.epgRefreshing;
@@ -216,6 +184,39 @@ class ChannelManager {
   }
 }
 
+function parseChannelPage(html) {
+  const sm = STREAM_NAME_RE.exec(html);
+  const gm = GUIDE_JSON_RE.exec(html);
+  return { chid: sm ? sm[1] : null, guideId: gm ? gm[1] : null };
+}
+
+function buildXmltv(channelItems, programmesByChid) {
+  const lines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<tv generator-info-name="thetvappstream">',
+  ];
+  for (const it of channelItems) {
+    lines.push(
+      `  <channel id="${encodeXML(it.chid)}"><display-name>${encodeXML(it.name)}</display-name></channel>`,
+    );
+  }
+  let programmeCount = 0;
+  for (const it of channelItems) {
+    for (const p of programmesByChid[it.chid] || []) {
+      if (!p || !p.title || !p.startTime || !p.endTime) continue;
+      lines.push(
+        `  <programme channel="${encodeXML(it.chid)}" start="${formatXmltvTime(p.startTime)}" stop="${formatXmltvTime(p.endTime)}">`,
+      );
+      lines.push(`    <title>${encodeXML(p.title)}</title>`);
+      if (p.episodeTitle) lines.push(`    <sub-title>${encodeXML(p.episodeTitle)}</sub-title>`);
+      lines.push('  </programme>');
+      programmeCount++;
+    }
+  }
+  lines.push('</tv>');
+  return { xml: lines.join('\n') + '\n', programmeCount };
+}
+
 function formatXmltvTime(unixSeconds) {
   const d = new Date(unixSeconds * 1000);
   const pad = n => String(n).padStart(2, '0');
@@ -225,4 +226,22 @@ function formatXmltvTime(unixSeconds) {
   );
 }
 
+async function runWithConcurrency(items, limit, worker) {
+  const results = [];
+  let i = 0;
+  const runners = Array.from({ length: limit }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await worker(items[idx], idx);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
 module.exports = ChannelManager;
+module.exports.ChannelManager = ChannelManager;
+module.exports.parseChannelPage = parseChannelPage;
+module.exports.buildXmltv = buildXmltv;
+module.exports.formatXmltvTime = formatXmltvTime;
+module.exports.runWithConcurrency = runWithConcurrency;
