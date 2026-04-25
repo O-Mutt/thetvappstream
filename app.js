@@ -23,13 +23,24 @@ app.get('/channels.m3u', async (req, res) => {
     let m3u = '#EXTM3U';
     Object.entries(channels).forEach(([name, chid], i) => {
       const logo = channelLogos.channels.find(c => c.name === name)?.logo || '';
-      m3u += `\n#EXTINF:-1 tvg-chno="${i + 1}" tvg-logo="${logo}", ${name}\n${base}/channel/${chid}`;
+      m3u +=
+        `\n#EXTINF:-1 tvg-id="${chid}" tvg-chno="${i + 1}" tvg-logo="${logo}", ${name}` +
+        `\n${base}/channel/${chid}`;
     });
     res.type('audio/x-mpegurl').send(m3u);
   } catch (e) {
     console.error(`/channels.m3u: ${e.message}`);
     res.status(500).send(e.message);
   }
+});
+
+app.get('/epg.xml', (_req, res) => {
+  const xml = channelManager.getEpgXml();
+  if (!xml) {
+    res.status(503).type('text/plain').send('EPG not yet built; try again shortly.');
+    return;
+  }
+  res.type('application/xml').send(xml);
 });
 
 app.get('/channel/:chid', async (req, res) => {
@@ -46,11 +57,19 @@ app.get('/healthz', (_req, res) => {
   res.type('text/plain').send('ok');
 });
 
+const EPG_REFRESH_MS = 6 * 60 * 60 * 1000;
+
 (async () => {
   try {
     await channelManager.ensureSession();
-    // Warm the channel list (one-time scrape ~118 channels in parallel).
-    channelManager.listChannels().catch(e => console.error(`channel list warmup: ${e.message}`));
+    // Warm the channel list (~118 channels), then build the EPG once it's ready.
+    channelManager
+      .listChannels()
+      .then(() => channelManager.refreshEpg())
+      .catch(e => console.error(`startup warmup: ${e.message}`));
+    setInterval(() => {
+      channelManager.refreshEpg().catch(e => console.error(`epg refresh: ${e.message}`));
+    }, EPG_REFRESH_MS);
   } catch (e) {
     console.error(`startup: session bootstrap failed: ${e.message}`);
   }
