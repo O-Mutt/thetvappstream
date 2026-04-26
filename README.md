@@ -57,7 +57,7 @@ CI runs lint + format + tests on every PR (`.github/workflows/lint.yml`); the Do
 
 ## Caveat: per-game event streams
 
-Per-game streams are backed by upstream "slot" IDs (`mlb01`, `nhl02`, etc.) rather than per-event IDs — the same slot is reused as one game ends and the next begins. The container refreshes the event list every `EVENT_REFRESH_MS` to keep the M3U/EPG roughly aligned with the live slot assignments, but a stale playlist entry can resolve to whichever game is currently in that slot. Disable with `ENABLE_EVENT_STREAMS=false` if this isn't the behavior you want.
+Per-game streams are backed by upstream "slot" IDs (`mlb01`, `nhl02`, etc.) — the same slot is reused as one game ends and the next begins. To keep Plex/dispatcharr happy with a 1:1 mapping between playlist entries and EPG channels, every event row gets its own synthetic id (`evt-<url-slug>`) used in `tvg-id` and `<channel id>`, while the actual stream URL still points at the upstream slot. Practical implication: tuning into a stale playlist entry resolves to whichever game is currently in that slot, not necessarily the one named in the entry. The container refreshes the event list every `EVENT_REFRESH_MS` to keep this drift small. Disable with `ENABLE_EVENT_STREAMS=false` if this isn't the behavior you want.
 
 ## Disclaimer
 

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseSportIndex } = require('../EventManager');
+const { parseSportIndex, hrefToEventId, EventManager } = require('../EventManager');
 const { parseChannelPage } = require('../ChannelManager');
 
 const NHL_INDEX_HTML = `
@@ -77,4 +77,65 @@ test('parseChannelPage handles event-page slot ids the same way as channel pages
   const { chid, guideId } = parseChannelPage(eventHtml);
   assert.strictEqual(chid, 'mlb01');
   assert.strictEqual(guideId, null);
+});
+
+test('hrefToEventId derives a stable evt- id from the URL slug', () => {
+  assert.strictEqual(
+    hrefToEventId('/event/carolina-hurricanes-vs-ottawa-senators-apr-25-3-00-pm/'),
+    'evt-carolina-hurricanes-vs-ottawa-senators-apr-25-3-00-pm',
+  );
+  assert.strictEqual(hrefToEventId('/event/foo'), 'evt-foo');
+});
+
+test('hrefToEventId returns null for non-event hrefs and bad input', () => {
+  assert.strictEqual(hrefToEventId('/tv/cnn-live-stream/'), null);
+  assert.strictEqual(hrefToEventId('/event/'), null);
+  assert.strictEqual(hrefToEventId(''), null);
+  assert.strictEqual(hrefToEventId(null), null);
+  assert.strictEqual(hrefToEventId(undefined), null);
+});
+
+test('EventManager.getEpgFragment emits one channel + one programme per event (no dedup by slot)', () => {
+  // Two events sharing the same upstream slot 'mlb01' but distinct event ids.
+  // Old behavior collapsed them into one <channel> with two <programme>s; new
+  // behavior gives each its own <channel> so Plex sees a 1:1 mapping.
+  const em = new EventManager(null);
+  em.events = [
+    {
+      name: 'Yankees vs Red Sox @ 1 PM',
+      chid: 'mlb01',
+      eventId: 'evt-yankees-vs-redsox-1pm',
+      league: 'MLB',
+      startSec: 1777138800,
+      endSec: 1777151400,
+    },
+    {
+      name: 'Cubs vs Cardinals @ 4 PM',
+      chid: 'mlb01',
+      eventId: 'evt-cubs-vs-cardinals-4pm',
+      league: 'MLB',
+      startSec: 1777150800,
+      endSec: 1777163400,
+    },
+  ];
+
+  const { items, programmesByChid } = em.getEpgFragment();
+  assert.strictEqual(items.length, 2, 'two M3U entries should produce two EPG channels');
+  assert.deepStrictEqual(
+    items.map(i => i.chid),
+    ['evt-yankees-vs-redsox-1pm', 'evt-cubs-vs-cardinals-4pm'],
+  );
+  assert.strictEqual(programmesByChid['evt-yankees-vs-redsox-1pm'].length, 1);
+  assert.strictEqual(programmesByChid['evt-cubs-vs-cardinals-4pm'].length, 1);
+});
+
+test('EventManager.getEpgFragment skips events that lack an eventId', () => {
+  const em = new EventManager(null);
+  em.events = [
+    { name: 'Has id', chid: 'mlb01', eventId: 'evt-has-id', league: 'MLB', startSec: 1, endSec: 2 },
+    { name: 'No id', chid: 'mlb02', eventId: null, league: 'MLB', startSec: 3, endSec: 4 },
+  ];
+  const { items } = em.getEpgFragment();
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].chid, 'evt-has-id');
 });
