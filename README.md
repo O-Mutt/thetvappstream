@@ -4,20 +4,22 @@ An Express server that scrapes thetvapp.to and serves an M3U playlist plus an XM
 
 ## Endpoints
 
-| Path             | What it returns                                                                                                                                      |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/channels.m3u`  | M3U playlist of all available channels. Each entry has `tvg-id` set to the channel ID so it pairs automatically with the EPG.                        |
-| `/epg.xml`       | XMLTV programme guide (~118 channels, ~10k+ programmes, refreshed every 6h). Returns `503` for the brief window between startup and the first build. |
-| `/channel/:chid` | Resolves to the current signed HLS m3u8 URL and `302` redirects to it. Each call gets a fresh token, so URLs in the playlist never go stale.         |
-| `/healthz`       | Liveness probe (`200 ok`). The Docker image's HEALTHCHECK uses this.                                                                                 |
+| Path             | What it returns                                                                                                                                                                                                                                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/channels.m3u`  | M3U playlist of all available channels and (when enabled) per-game event streams. Each entry has `tvg-id` set to the chid so it pairs automatically with the EPG. Linear channels carry `group-title="Live TV"`; events carry the league name (e.g. `MLB`, `NHL`, `NFL`, `NBA`, `NCAAF`, `NCAAB`, `Soccer`, `PPV`). |
+| `/epg.xml`       | XMLTV programme guide (~118 channels, ~10k+ programmes, refreshed every 6h). When event streams are enabled, today's games are folded in as `<programme>` entries with synthesized end times. Returns `503` for the brief window between startup and the first build.                                               |
+| `/channel/:chid` | Resolves to the current signed HLS m3u8 URL and `302` redirects to it. Each call gets a fresh token, so URLs in the playlist never go stale.                                                                                                                                                                        |
+| `/healthz`       | Liveness probe (`200 ok`). The Docker image's HEALTHCHECK uses this.                                                                                                                                                                                                                                                |
 
 ## Configuration (env vars)
 
-| Var               | Default               | Notes                                                                                                                                                                                                                                                                         |
-| ----------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`            | `5000`                | HTTP port the server binds to.                                                                                                                                                                                                                                                |
-| `TV_URL`          | `https://thetvapp.to` | Upstream site root.                                                                                                                                                                                                                                                           |
-| `PUBLIC_BASE_URL` | _(unset)_             | Base URL emitted in the M3U (e.g. `https://thetvapp-proxy.example.com`). When unset, derived from the request's `Host`/`X-Forwarded-*` headers — works as long as the M3U is fetched at a URL downstream players can also reach. Strongly recommended behind a reverse proxy. |
+| Var                    | Default               | Notes                                                                                                                                                                                                                                                                         |
+| ---------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                 | `5000`                | HTTP port the server binds to.                                                                                                                                                                                                                                                |
+| `TV_URL`               | `https://thetvapp.to` | Upstream site root.                                                                                                                                                                                                                                                           |
+| `PUBLIC_BASE_URL`      | _(unset)_             | Base URL emitted in the M3U (e.g. `https://thetvapp-proxy.example.com`). When unset, derived from the request's `Host`/`X-Forwarded-*` headers — works as long as the M3U is fetched at a URL downstream players can also reach. Strongly recommended behind a reverse proxy. |
+| `ENABLE_EVENT_STREAMS` | `true`                | When `true`, scrape `/mlb`, `/nhl`, `/nfl`, `/nba`, `/ncaaf`, `/ncaab`, `/soccer`, and `/ppv` for per-game event streams and merge them into the M3U + EPG. Set to `false` to serve only the linear TV channel list.                                                          |
+| `EVENT_REFRESH_MS`     | `1800000` (30 min)    | How often to re-scrape the per-sport listing pages. Event chids are slot IDs that get reassigned as games rotate through the day, so frequent refresh matters more here than for the linear channel cache.                                                                    |
 
 ## Running with Docker
 
@@ -52,6 +54,10 @@ node app.js
 ```
 
 CI runs lint + format + tests on every PR (`.github/workflows/lint.yml`); the Docker image is built and pushed to GHCR on merges to `main` (`.github/workflows/docker.yml`).
+
+## Caveat: per-game event streams
+
+Per-game streams are backed by upstream "slot" IDs (`mlb01`, `nhl02`, etc.) rather than per-event IDs — the same slot is reused as one game ends and the next begins. The container refreshes the event list every `EVENT_REFRESH_MS` to keep the M3U/EPG roughly aligned with the live slot assignments, but a stale playlist entry can resolve to whichever game is currently in that slot. Disable with `ENABLE_EVENT_STREAMS=false` if this isn't the behavior you want.
 
 ## Disclaimer
 

@@ -71,7 +71,7 @@ class ChannelManager {
     }
   }
 
-  async _getWithRetry(path, { retries = 3, baseDelayMs = 750 } = {}) {
+  async getWithRetry(path, { retries = 3, baseDelayMs = 750 } = {}) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       const r = await this.client.get(path, { headers: { Cookie: this._cookieHeader() } });
       if (r.status === 200) return r;
@@ -87,7 +87,7 @@ class ChannelManager {
     if (Object.keys(this.channelsCache).length > 0) return this.channelsCache;
     await this.ensureSession();
 
-    const index = await this._getWithRetry('/');
+    const index = await this.getWithRetry('/');
     const $ = cheerio.load(index.data);
 
     const links = [];
@@ -101,7 +101,7 @@ class ChannelManager {
     const guideIds = {};
     await runWithConcurrency(links, 4, async ({ href, name }) => {
       try {
-        const r = await this._getWithRetry(href);
+        const r = await this.getWithRetry(href);
         if (r.status !== 200) {
           console.error(`listChannels: ${name}: ${href} -> ${r.status}`);
           return;
@@ -128,6 +128,10 @@ class ChannelManager {
     return this.channelsCache;
   }
 
+  setEventManager(em) {
+    this.eventManager = em;
+  }
+
   async refreshEpg() {
     if (this.epgRefreshing) return this.epgRefreshing;
     this.epgRefreshing = (async () => {
@@ -139,7 +143,7 @@ class ChannelManager {
       const programmesByChid = {};
       await runWithConcurrency(items, 4, async item => {
         try {
-          const r = await this._getWithRetry(`/json/${item.guideId}.json`);
+          const r = await this.getWithRetry(`/json/${item.guideId}.json`);
           if (r.status === 200 && Array.isArray(r.data)) {
             programmesByChid[item.chid] = r.data;
           }
@@ -148,10 +152,21 @@ class ChannelManager {
         }
       });
 
-      const { xml, programmeCount } = buildXmltv(items, programmesByChid);
+      const extras = this.eventManager ? this.eventManager.getEpgFragment() : null;
+      const allItems = extras ? [...items, ...extras.items] : items;
+      const allProgrammes = extras
+        ? { ...programmesByChid, ...extras.programmesByChid }
+        : programmesByChid;
+
+      const { xml, programmeCount } = buildXmltv(allItems, allProgrammes);
       this.epgXml = xml;
       this.epgLastRefresh = Date.now();
-      console.log(`[epg] refreshed: ${items.length} channels, ${programmeCount} programmes`);
+      const extraChannelCount = extras ? extras.items.length : 0;
+      console.log(
+        `[epg] refreshed: ${items.length} channels` +
+          (extraChannelCount ? ` + ${extraChannelCount} events` : '') +
+          `, ${programmeCount} programmes`,
+      );
     })();
     try {
       await this.epgRefreshing;
