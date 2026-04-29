@@ -1,5 +1,6 @@
 const cheerio = require('cheerio');
 const { parseChannelPage, runWithConcurrency } = require('./ChannelManager');
+const { pickEventLogo } = require('./eventLogos');
 
 const SPORT_PATHS = ['/mlb', '/nhl', '/nfl', '/nba', '/ncaaf', '/ncaab', '/soccer', '/ppv'];
 
@@ -109,6 +110,7 @@ class EventManager {
             league: listing.league,
             startSec: listing.startSec,
             endSec: listing.startSec + durSec,
+            logo: pickEventLogo({ league: listing.league, name: listing.name }),
           });
         } catch (e) {
           console.error(`[events] ${listing.href}: ${e.message}`);
@@ -144,7 +146,7 @@ class EventManager {
     for (const e of this.events) {
       const id = e.eventId;
       if (!id) continue;
-      items.push({ name: `${e.league}: ${e.name}`, chid: id });
+      items.push({ name: `${e.league}: ${e.name}`, chid: id, logo: e.logo });
       programmesByChid[id] = [
         { title: `${e.league}: ${e.name}`, startTime: e.startSec, endTime: e.endSec },
       ];

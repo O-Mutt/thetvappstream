@@ -36,7 +36,7 @@ app.get('/channels.m3u', async (req, res) => {
         // per M3U row; the URL still points at the upstream slot chid for
         // stream resolution.
         m3u +=
-          `\n#EXTINF:-1 tvg-id="${ev.eventId}" tvg-chno="${chno}" group-title="${ev.league}", ${ev.name}` +
+          `\n#EXTINF:-1 tvg-id="${ev.eventId}" tvg-chno="${chno}" tvg-logo="${ev.logo || ''}" group-title="${ev.league}", ${ev.name}` +
           `\n${base}/channel/${ev.chid}`;
       }
     }
