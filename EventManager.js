@@ -104,7 +104,8 @@ class EventManager {
           const durSec = (LEAGUE_DURATION_MIN[listing.league] || 180) * 60;
           events.push({
             name: listing.name,
-            chid,
+            chid, // upstream slot id used for stream resolution
+            eventId: hrefToEventId(listing.href), // stable per-event id used in M3U/EPG
             league: listing.league,
             startSec: listing.startSec,
             endSec: listing.startSec + durSec,
@@ -132,25 +133,19 @@ class EventManager {
     return this.events;
   }
 
-  // XMLTV fragment for ChannelManager.refreshEpg() to merge in.
+  // XMLTV fragment for ChannelManager.refreshEpg() to merge in. Each event gets
+  // its own <channel> + <programme> keyed by a synthetic per-event id (derived
+  // from the event URL slug) so Plex sees a 1:1 match between M3U entries and
+  // EPG channels. The underlying stream slot id is reused across the day, but
+  // that's only relevant for stream resolution (handled separately).
   getEpgFragment() {
     const items = [];
     const programmesByChid = {};
-    const seenChids = new Set();
     for (const e of this.events) {
-      // Multiple events can resolve to the same slot chid throughout the day;
-      // keep the soonest-starting one for the EPG so we don't double-list it.
-      if (seenChids.has(e.chid)) {
-        programmesByChid[e.chid].push({
-          title: `${e.league}: ${e.name}`,
-          startTime: e.startSec,
-          endTime: e.endSec,
-        });
-        continue;
-      }
-      seenChids.add(e.chid);
-      items.push({ name: `${e.league}: ${e.name}`, chid: e.chid });
-      programmesByChid[e.chid] = [
+      const id = e.eventId;
+      if (!id) continue;
+      items.push({ name: `${e.league}: ${e.name}`, chid: id });
+      programmesByChid[id] = [
         { title: `${e.league}: ${e.name}`, startTime: e.startSec, endTime: e.endSec },
       ];
     }
@@ -158,9 +153,21 @@ class EventManager {
   }
 }
 
+// `/event/foo-vs-bar-apr-25-3-00-pm/` → `evt-foo-vs-bar-apr-25-3-00-pm`. The
+// trailing slash is optional; anything that isn't [A-Za-z0-9_-] is stripped so
+// the result is safe to drop into XMLTV ids and M3U tvg-id attributes.
+function hrefToEventId(href) {
+  if (!href || typeof href !== 'string') return null;
+  const m = /^\/event\/([^/]+)/.exec(href);
+  if (!m) return null;
+  const slug = m[1].replace(/[^A-Za-z0-9_-]/g, '');
+  return slug ? `evt-${slug}` : null;
+}
+
 module.exports = EventManager;
 module.exports.EventManager = EventManager;
 module.exports.parseSportIndex = parseSportIndex;
+module.exports.hrefToEventId = hrefToEventId;
 module.exports.SPORT_PATHS = SPORT_PATHS;
 module.exports.LEAGUE_BY_PATH = LEAGUE_BY_PATH;
 module.exports.LEAGUE_DURATION_MIN = LEAGUE_DURATION_MIN;

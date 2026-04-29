@@ -30,9 +30,13 @@ app.get('/channels.m3u', async (req, res) => {
     });
     if (eventManager) {
       for (const ev of eventManager.listEvents()) {
+        if (!ev.eventId) continue;
         chno++;
+        // tvg-id uses the per-event synthetic id so Plex sees one EPG channel
+        // per M3U row; the URL still points at the upstream slot chid for
+        // stream resolution.
         m3u +=
-          `\n#EXTINF:-1 tvg-id="${ev.chid}" tvg-chno="${chno}" group-title="${ev.league}", ${ev.name}` +
+          `\n#EXTINF:-1 tvg-id="${ev.eventId}" tvg-chno="${chno}" group-title="${ev.league}", ${ev.name}` +
           `\n${base}/channel/${ev.chid}`;
       }
     }
