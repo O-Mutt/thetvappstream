@@ -61,9 +61,7 @@ test('buildXmltv emits <icon src=...> when channel item has a logo', () => {
 });
 
 test('buildXmltv XML-escapes logo URLs (e.g., ampersand in query string)', () => {
-  const channels = [
-    { chid: 'A', name: 'A', logo: 'https://cdn.example.com/img?w=64&h=64' },
-  ];
+  const channels = [{ chid: 'A', name: 'A', logo: 'https://cdn.example.com/img?w=64&h=64' }];
   const { xml } = buildXmltv(channels, {});
   assert.match(xml, /<icon src="https:\/\/cdn\.example\.com\/img\?w=64&amp;h=64"\/>/);
 });
