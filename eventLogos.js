@@ -1,7 +1,5 @@
-const espn = (league, key) =>
-  `https://a.espncdn.com/i/teamlogos/${league}/500/${key}.png`;
-const espnLeague = key =>
-  `https://a.espncdn.com/i/teamlogos/leagues/500/${key}.png`;
+const espn = (league, key) => `https://a.espncdn.com/i/teamlogos/${league}/500/${key}.png`;
+const espnLeague = key => `https://a.espncdn.com/i/teamlogos/leagues/500/${key}.png`;
 
 const LEAGUE_LOGOS = {
   MLB: espnLeague('mlb'),
@@ -48,7 +46,7 @@ const TEAM_LOGOS = {
     'Minnesota Twins': espn('mlb', 'min'),
     'New York Mets': espn('mlb', 'nym'),
     'New York Yankees': espn('mlb', 'nyy'),
-    'Athletics': espn('mlb', 'oak'),
+    Athletics: espn('mlb', 'oak'),
     'Philadelphia Phillies': espn('mlb', 'phi'),
     'Pittsburgh Pirates': espn('mlb', 'pit'),
     'San Diego Padres': espn('mlb', 'sd'),
@@ -179,7 +177,7 @@ const TEAM_LOGOS = {
     'Inter Miami CF': espn('soccer', '20232'),
     'LA Galaxy': espn('soccer', '187'),
     'Los Angeles FC': espn('soccer', '18966'),
-    'LAFC': espn('soccer', '18966'),
+    LAFC: espn('soccer', '18966'),
     'Minnesota United': espn('soccer', '17362'),
     'Nashville SC': espn('soccer', '18986'),
     'New England Revolution': espn('soccer', '189'),

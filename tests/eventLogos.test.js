@@ -1,11 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const {
-  parseMatchupTeams,
-  pickEventLogo,
-  LEAGUE_LOGOS,
-  TEAM_LOGOS,
-} = require('../eventLogos');
+const { parseMatchupTeams, pickEventLogo, LEAGUE_LOGOS, TEAM_LOGOS } = require('../eventLogos');
 
 test('parseMatchupTeams pulls both teams and strips trailing date stamp', () => {
   assert.deepStrictEqual(
@@ -76,14 +71,8 @@ test('pickEventLogo falls back to league logo when away team is unknown', () => 
 
 test('pickEventLogo returns null for leagues with no league logo (NCAA, PPV) and no team match', () => {
   // No preferred team in matchup, no team-map hit, no league fallback for NCAA -> null
-  assert.strictEqual(
-    pickEventLogo({ league: 'NCAAF', name: 'Iowa vs Wisconsin @ Nov 8' }),
-    null,
-  );
-  assert.strictEqual(
-    pickEventLogo({ league: 'PPV', name: 'Some Fight @ May 10' }),
-    null,
-  );
+  assert.strictEqual(pickEventLogo({ league: 'NCAAF', name: 'Iowa vs Wisconsin @ Nov 8' }), null);
+  assert.strictEqual(pickEventLogo({ league: 'PPV', name: 'Some Fight @ May 10' }), null);
 });
 
 test('pickEventLogo returns null when called with bad input', () => {
