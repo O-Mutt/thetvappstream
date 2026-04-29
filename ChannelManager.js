@@ -2,6 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { encodeXML } = require('entities');
 const { TV_URL } = require('./config');
+const { getChannelLogos } = require('./utils');
 
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
@@ -136,9 +137,15 @@ class ChannelManager {
     if (this.epgRefreshing) return this.epgRefreshing;
     this.epgRefreshing = (async () => {
       const channels = await this.listChannels();
+      const logosByName = await loadLogosByName();
       const items = Object.entries(channels)
         .filter(([, chid]) => this.guideIds[chid])
-        .map(([name, chid]) => ({ name, chid, guideId: this.guideIds[chid] }));
+        .map(([name, chid]) => ({
+          name,
+          chid,
+          guideId: this.guideIds[chid],
+          logo: logosByName.get(name) || null,
+        }));
 
       const programmesByChid = {};
       await runWithConcurrency(items, 4, async item => {
@@ -205,14 +212,24 @@ function parseChannelPage(html) {
   return { chid: sm ? sm[1] : null, guideId: gm ? gm[1] : null };
 }
 
+async function loadLogosByName() {
+  const data = await getChannelLogos();
+  const map = new Map();
+  for (const c of data?.channels || []) {
+    if (c?.name && c?.logo) map.set(c.name, c.logo);
+  }
+  return map;
+}
+
 function buildXmltv(channelItems, programmesByChid) {
   const lines = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<tv generator-info-name="thetvappstream">',
   ];
   for (const it of channelItems) {
+    const iconTag = it.logo ? `<icon src="${encodeXML(it.logo)}"/>` : '';
     lines.push(
-      `  <channel id="${encodeXML(it.chid)}"><display-name>${encodeXML(it.name)}</display-name></channel>`,
+      `  <channel id="${encodeXML(it.chid)}"><display-name>${encodeXML(it.name)}</display-name>${iconTag}</channel>`,
     );
   }
   let programmeCount = 0;

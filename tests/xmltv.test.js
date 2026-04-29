@@ -46,6 +46,26 @@ test('buildXmltv emits programmes with correct attributes and counts', () => {
   assert.match(xml, /<title>Women&apos;s Show<\/title>/);
 });
 
+test('buildXmltv emits <icon src=...> when channel item has a logo', () => {
+  const channels = [
+    { chid: 'CNN', name: 'CNN', logo: 'https://example.com/cnn.png' },
+    { chid: 'X', name: 'X', logo: null }, // no logo -> no icon tag
+  ];
+  const { xml } = buildXmltv(channels, {});
+  assert.match(
+    xml,
+    /<channel id="CNN"><display-name>CNN<\/display-name><icon src="https:\/\/example\.com\/cnn\.png"\/><\/channel>/,
+  );
+  // Channel without a logo keeps the bare skeleton
+  assert.match(xml, /<channel id="X"><display-name>X<\/display-name><\/channel>/);
+});
+
+test('buildXmltv XML-escapes logo URLs (e.g., ampersand in query string)', () => {
+  const channels = [{ chid: 'A', name: 'A', logo: 'https://cdn.example.com/img?w=64&h=64' }];
+  const { xml } = buildXmltv(channels, {});
+  assert.match(xml, /<icon src="https:\/\/cdn\.example\.com\/img\?w=64&amp;h=64"\/>/);
+});
+
 test('buildXmltv skips programmes with missing required fields', () => {
   const channels = [{ chid: 'X', name: 'X' }];
   const programmes = {
