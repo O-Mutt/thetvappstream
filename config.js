@@ -13,7 +13,20 @@ function parsePositiveInt(v, fallback) {
 
 module.exports = {
   PORT: process.env.PORT || 5000,
+  // Ordered list of enabled stream sources (see providers/index.js registry).
+  // First-listed wins for same-game event fallback ordering.
+  PROVIDERS: (process.env.PROVIDERS || 'thetvapp')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
   TV_URL: process.env.TV_URL || 'https://thetvapp.to',
+  // Ordered mirror list for the thetvapp source. Domains rotate, so list known
+  // alternates (comma-separated) and the resolver fails over to the first live
+  // one. Falls back to TV_URL for backward compatibility.
+  THETVAPP_URLS: (process.env.THETVAPP_URLS || process.env.TV_URL || 'https://thetvapp.to')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
   // Optional. When set, the M3U playlist emits channel URLs prefixed with this
   // value (e.g. https://thetvapp-proxy.example.com). When unset, the prefix is
   // derived from the request's Host/X-Forwarded-* headers, which works as long
@@ -22,6 +35,12 @@ module.exports = {
   // When true, scrape per-game event pages (MLB/NHL/NFL/NBA/NCAAF/NCAAB/Soccer/PPV)
   // and merge them into /channels.m3u and /epg.xml alongside the linear TV channels.
   ENABLE_EVENT_STREAMS: parseBool(process.env.ENABLE_EVENT_STREAMS, true),
+  // DaddyLive (dlhd) mirror list + whether to surface its (best-effort) events.
+  DLHD_URLS: (process.env.DLHD_URLS || 'https://dlhd.pk')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
+  DLHD_ENABLE_EVENTS: parseBool(process.env.DLHD_ENABLE_EVENTS, true),
   // How often to re-scrape the per-sport listing pages. The chids that back
   // event entries are slot ids reused across the day, so frequent refresh
   // matters more here than for the TV channel cache.

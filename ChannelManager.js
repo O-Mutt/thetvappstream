@@ -3,6 +3,7 @@ const cheerio = require('cheerio');
 const { encodeXML } = require('entities');
 const { TV_URL } = require('./config');
 const { getChannelLogos } = require('./utils');
+const MirrorResolver = require('./MirrorResolver');
 
 const UA =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
@@ -14,9 +15,13 @@ const STREAM_NAME_RE = /<div id="stream_name"\s+name="([^"]+)"/;
 const GUIDE_JSON_RE = /thetvapp\.to\/json\/(\d+)\.json/;
 
 class ChannelManager {
-  constructor() {
+  constructor({ urls } = {}) {
+    const candidates = urls && urls.length ? urls : [TV_URL];
+    this.mirrors = new MirrorResolver('thetvapp', candidates, {
+      probe: u => this._probeBase(u),
+    });
     this.client = axios.create({
-      baseURL: TV_URL,
+      baseURL: this.mirrors.active(),
       headers: { 'User-Agent': UA, Accept: '*/*' },
       validateStatus: () => true,
     });
@@ -27,6 +32,27 @@ class ChannelManager {
     this.epgLastRefresh = 0;
     this.epgRefreshing = null;
     this.sessionPromise = null;
+  }
+
+  // Liveness check for a candidate mirror: a quick GET / that looks like the
+  // thetvapp channel index (the markup the scrapers depend on). Uses a one-off
+  // request so it can target a different base than the active client.
+  async _probeBase(url) {
+    try {
+      const r = await axios.get(url, {
+        headers: { 'User-Agent': UA, Accept: '*/*' },
+        timeout: 8000,
+        maxRedirects: 5,
+        validateStatus: () => true,
+      });
+      return r.status === 200 && /list-group-item/.test(String(r.data || ''));
+    } catch {
+      return false;
+    }
+  }
+
+  _syncBase() {
+    this.client.defaults.baseURL = this.mirrors.active();
   }
 
   _cookieHeader() {
@@ -51,6 +77,11 @@ class ChannelManager {
     if (!force && this.cookieJar.length > 0) return;
 
     this.sessionPromise = (async () => {
+      // Pick a live mirror before bootstrapping so a dead primary domain fails
+      // over to an alternate up front, not just mid-scrape.
+      await this.mirrors.resolve();
+      this._syncBase();
+
       const r1 = await this.client.get('/');
       if (r1.status !== 200) throw new Error(`session bootstrap GET / failed: ${r1.status}`);
       this._ingestCookies(r1.headers['set-cookie']);
@@ -74,13 +105,25 @@ class ChannelManager {
 
   async getWithRetry(path, { retries = 3, baseDelayMs = 750 } = {}) {
     for (let attempt = 0; attempt <= retries; attempt++) {
-      const r = await this.client.get(path, { headers: { Cookie: this._cookieHeader() } });
-      if (r.status === 200) return r;
-      if (r.status === 503 && attempt < retries) {
-        await new Promise(res => setTimeout(res, baseDelayMs * (attempt + 1)));
-        continue;
+      try {
+        const r = await this.client.get(path, { headers: { Cookie: this._cookieHeader() } });
+        if (r.status === 200) return r;
+        if (r.status === 503 && attempt < retries) {
+          await new Promise(res => setTimeout(res, baseDelayMs * (attempt + 1)));
+          continue;
+        }
+        return r;
+      } catch (e) {
+        // Connection-level failure (refused/DNS/timeout) -> the active domain is
+        // likely dead. Rotate to the next live mirror and retry the same path.
+        if (attempt < retries) {
+          await this.mirrors.rotate();
+          this._syncBase();
+          await new Promise(res => setTimeout(res, baseDelayMs * (attempt + 1)));
+          continue;
+        }
+        throw e;
       }
-      return r;
     }
   }
 
@@ -133,44 +176,55 @@ class ChannelManager {
     this.eventManager = em;
   }
 
+  // Linear-channel EPG only, as { items, programmesByChid }. Event folding and
+  // cross-provider merging now happen in the Aggregator, so this returns just
+  // this source's own channels — the unit the provider abstraction consumes.
+  async collectEpgData() {
+    const channels = await this.listChannels();
+    const logosByName = await loadLogosByName();
+    const items = Object.entries(channels)
+      .filter(([, chid]) => this.guideIds[chid])
+      .map(([name, chid]) => ({
+        name,
+        chid,
+        guideId: this.guideIds[chid],
+        logo: logosByName.get(name) || null,
+      }));
+
+    const programmesByChid = {};
+    await runWithConcurrency(items, 4, async item => {
+      try {
+        const r = await this.getWithRetry(`/json/${item.guideId}.json`);
+        if (r.status === 200 && Array.isArray(r.data)) {
+          programmesByChid[item.chid] = r.data;
+        }
+      } catch (e) {
+        console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
+      }
+    });
+
+    return {
+      items: items.map(({ name, chid, logo }) => ({ name, chid, logo })),
+      programmesByChid,
+    };
+  }
+
   async refreshEpg() {
     if (this.epgRefreshing) return this.epgRefreshing;
     this.epgRefreshing = (async () => {
-      const channels = await this.listChannels();
-      const logosByName = await loadLogosByName();
-      const items = Object.entries(channels)
-        .filter(([, chid]) => this.guideIds[chid])
-        .map(([name, chid]) => ({
-          name,
-          chid,
-          guideId: this.guideIds[chid],
-          logo: logosByName.get(name) || null,
-        }));
-
-      const programmesByChid = {};
-      await runWithConcurrency(items, 4, async item => {
-        try {
-          const r = await this.getWithRetry(`/json/${item.guideId}.json`);
-          if (r.status === 200 && Array.isArray(r.data)) {
-            programmesByChid[item.chid] = r.data;
-          }
-        } catch (e) {
-          console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
-        }
-      });
-
+      const base = await this.collectEpgData();
       const extras = this.eventManager ? this.eventManager.getEpgFragment() : null;
-      const allItems = extras ? [...items, ...extras.items] : items;
+      const allItems = extras ? [...base.items, ...extras.items] : base.items;
       const allProgrammes = extras
-        ? { ...programmesByChid, ...extras.programmesByChid }
-        : programmesByChid;
+        ? { ...base.programmesByChid, ...extras.programmesByChid }
+        : base.programmesByChid;
 
       const { xml, programmeCount } = buildXmltv(allItems, allProgrammes);
       this.epgXml = xml;
       this.epgLastRefresh = Date.now();
       const extraChannelCount = extras ? extras.items.length : 0;
       console.log(
-        `[epg] refreshed: ${items.length} channels` +
+        `[epg] refreshed: ${base.items.length} channels` +
           (extraChannelCount ? ` + ${extraChannelCount} events` : '') +
           `, ${programmeCount} programmes`,
       );
