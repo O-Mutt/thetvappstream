@@ -20,6 +20,13 @@ module.exports = {
     .map(s => s.trim())
     .filter(Boolean),
   TV_URL: process.env.TV_URL || 'https://thetvapp.to',
+  // Ordered mirror list for the thetvapp source. Domains rotate, so list known
+  // alternates (comma-separated) and the resolver fails over to the first live
+  // one. Falls back to TV_URL for backward compatibility.
+  THETVAPP_URLS: (process.env.THETVAPP_URLS || process.env.TV_URL || 'https://thetvapp.to')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
   // Optional. When set, the M3U playlist emits channel URLs prefixed with this
   // value (e.g. https://thetvapp-proxy.example.com). When unset, the prefix is
   // derived from the request's Host/X-Forwarded-* headers, which works as long

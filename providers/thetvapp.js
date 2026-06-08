@@ -1,14 +1,15 @@
 const Provider = require('./Provider');
 const ChannelManager = require('../ChannelManager');
 const EventManager = require('../EventManager');
+const { THETVAPP_URLS } = require('../config');
 
 // TheTVApp adapter. All thetvapp.to-specific scraping (session cookies, HTML
 // selectors, signed-token resolution) stays in ChannelManager/EventManager;
 // this class just exposes them through the Provider contract.
 class TheTvAppProvider extends Provider {
-  constructor({ enableEvents = true } = {}) {
+  constructor({ enableEvents = true, urls = THETVAPP_URLS } = {}) {
     super();
-    this.channelManager = new ChannelManager();
+    this.channelManager = new ChannelManager({ urls });
     this.eventManager = enableEvents ? new EventManager(this.channelManager) : null;
     if (this.eventManager) this.channelManager.setEventManager(this.eventManager);
   }

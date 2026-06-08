@@ -45,32 +45,30 @@ app.get('/healthz', (_req, res) => {
 
 const EPG_REFRESH_MS = 6 * 60 * 60 * 1000;
 
-(async () => {
-  try {
-    await aggregator.ensureReady();
-    // Prime the stream index (so /channel resolves before the first M3U fetch),
-    // then build the EPG.
-    aggregator
-      .listM3uEntries()
-      .then(() => aggregator.refreshEpg())
-      .catch(e => console.error(`startup warmup: ${e.message}`));
+// Listen immediately; warm the providers in the background so a slow or dead
+// source never blocks the HTTP server from coming up. Until warmup finishes,
+// /channels.m3u is empty and /epg.xml returns 503 — both recover on their own.
+app.listen(PORT, () => {
+  const advertised = PUBLIC_BASE_URL || `http://0.0.0.0:${PORT}`;
+  console.log(`Server listening on :${PORT} (public base: ${advertised})`);
+});
 
-    setInterval(() => {
-      aggregator.refreshEpg().catch(e => console.error(`epg refresh: ${e.message}`));
-    }, EPG_REFRESH_MS);
+aggregator
+  .ensureReady()
+  // Prime the stream index (so /channel resolves before the first M3U fetch),
+  // then build the EPG.
+  .then(() => aggregator.listM3uEntries())
+  .then(() => aggregator.refreshEpg())
+  .catch(e => console.error(`startup warmup: ${e.message}`));
 
-    setInterval(() => {
-      aggregator
-        .refreshEvents()
-        .then(() => aggregator.listM3uEntries())
-        .then(() => aggregator.refreshEpg())
-        .catch(e => console.error(`event refresh: ${e.message}`));
-    }, EVENT_REFRESH_MS);
-  } catch (e) {
-    console.error(`startup: bootstrap failed: ${e.message}`);
-  }
-  app.listen(PORT, () => {
-    const advertised = PUBLIC_BASE_URL || `http://0.0.0.0:${PORT}`;
-    console.log(`Server listening on :${PORT} (public base: ${advertised})`);
-  });
-})();
+setInterval(() => {
+  aggregator.refreshEpg().catch(e => console.error(`epg refresh: ${e.message}`));
+}, EPG_REFRESH_MS);
+
+setInterval(() => {
+  aggregator
+    .refreshEvents()
+    .then(() => aggregator.listM3uEntries())
+    .then(() => aggregator.refreshEpg())
+    .catch(e => console.error(`event refresh: ${e.message}`));
+}, EVENT_REFRESH_MS);
