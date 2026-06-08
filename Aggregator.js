@@ -146,8 +146,14 @@ class Aggregator {
         } catch (e) {
           console.error(`[${p.name}] getEpgData: ${e.message}`);
         }
-        for (const it of data.items || []) allItems.push(it);
-        Object.assign(allProgrammes, data.programmesByChid || {});
+        // Namespace linear guide ids to match the `${provider}:${ref}` tvg-ids
+        // listM3uEntries emits, so Plex pairs each channel with its guide.
+        for (const it of data.items || []) {
+          allItems.push({ ...it, chid: `${p.name}:${it.chid}` });
+        }
+        for (const [chid, progs] of Object.entries(data.programmesByChid || {})) {
+          allProgrammes[`${p.name}:${chid}`] = progs;
+        }
       }
 
       // Synthesize one programme per deduped event, keyed to the same id the

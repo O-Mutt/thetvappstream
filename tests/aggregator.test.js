@@ -119,10 +119,24 @@ test('refreshEpg merges linear guides and synthesizes event programmes', async (
   await agg.refreshEpg();
   const xml = agg.getEpgXml();
 
-  assert.match(xml, /<channel id="101"><display-name>CNN<\/display-name>/);
+  // linear guide id is namespaced to match the M3U tvg-id
+  assert.match(xml, /<channel id="thetvapp:101"><display-name>CNN<\/display-name>/);
   assert.match(xml, /<title>News<\/title>/);
   // event folded in under its canonical id with "<league>: <name>" title
   assert.match(xml, /<title>MLB: Twins vs Red Sox @ May 22 7:10 PM<\/title>/);
+});
+
+test('linear EPG channel id matches the linear M3U tvg-id (Plex pairing)', async () => {
+  const p = new FakeProvider('thetvapp', {
+    linear: { CNN: '101' },
+    epg: { items: [{ name: 'CNN', chid: '101', logo: null }], programmesByChid: {} },
+  });
+  const agg = new Aggregator([p]);
+  const m3u = await agg.getM3u('https://x');
+  await agg.refreshEpg();
+  const tvgId = /tvg-id="([^"]+)"/.exec(m3u)[1];
+  assert.strictEqual(tvgId, 'thetvapp:101');
+  assert.match(agg.getEpgXml(), new RegExp(`<channel id="${tvgId}">`));
 });
 
 test('an empty provider set yields a bare playlist and no epg', async () => {

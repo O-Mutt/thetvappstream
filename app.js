@@ -2,6 +2,7 @@ const express = require('express');
 const { baseUrlFor } = require('./baseUrl');
 const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS } = require('./config');
 const { createAggregator } = require('./providers');
+const { createHlsHandlers } = require('./hlsProxy');
 
 const app = express();
 // Honor X-Forwarded-Proto / X-Forwarded-Host so req.protocol + req.get('host')
@@ -9,6 +10,14 @@ const app = express();
 app.set('trust proxy', true);
 
 const aggregator = createAggregator();
+
+// Headers captured at resolve time for header-locked streams (DaddyLive et al.),
+// keyed by stream id so the segment proxy can replay them.
+const streamHeaders = new Map();
+const hls = createHlsHandlers({
+  lookupHeaders: id => streamHeaders.get(id) || null,
+  baseUrlFor: req => baseUrlFor(req, PUBLIC_BASE_URL),
+});
 
 app.get('/channels.m3u', async (req, res) => {
   try {
@@ -31,12 +40,31 @@ app.get('/epg.xml', (_req, res) => {
 
 app.get('/channel/:id', async (req, res) => {
   try {
-    const { url } = await aggregator.resolveStream(req.params.id);
-    res.redirect(url);
+    const { url, headers } = await aggregator.resolveStream(req.params.id);
+    if (headers && Object.keys(headers).length > 0) {
+      // Header-locked stream: remux through the proxy so segments carry the
+      // required Referer/Origin (a redirect can't).
+      streamHeaders.set(req.params.id, headers);
+      await hls.serveManifest(req, res, {
+        streamId: req.params.id,
+        url,
+        headers,
+        base: baseUrlFor(req, PUBLIC_BASE_URL),
+      });
+    } else {
+      res.redirect(url);
+    }
   } catch (e) {
     console.error(`/channel/${req.params.id}: ${e.message}`);
     res.status(404).send('Channel does not exist, or is blocked.');
   }
+});
+
+app.get('/hlsseg/:streamId', (req, res) => {
+  hls.segment(req, res).catch(e => {
+    console.error(`/hlsseg/${req.params.streamId}: ${e.message}`);
+    if (!res.headersSent) res.status(502).end();
+  });
 });
 
 app.get('/healthz', (_req, res) => {

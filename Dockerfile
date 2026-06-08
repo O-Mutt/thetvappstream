@@ -3,7 +3,12 @@ FROM node:24-slim
 WORKDIR /usr/src/app
 
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+# Install deps, then the Chromium build Playwright needs for the DaddyLive
+# headless solver (with its OS libraries). Sources that don't use the solver
+# (thetvapp) never launch it, but the binary must be present for those that do.
+RUN npm install --omit=dev --no-audit --no-fund \
+  && npx playwright install --with-deps chromium \
+  && npm cache clean --force
 
 COPY . .
 

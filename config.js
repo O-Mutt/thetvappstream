@@ -35,6 +35,12 @@ module.exports = {
   // When true, scrape per-game event pages (MLB/NHL/NFL/NBA/NCAAF/NCAAB/Soccer/PPV)
   // and merge them into /channels.m3u and /epg.xml alongside the linear TV channels.
   ENABLE_EVENT_STREAMS: parseBool(process.env.ENABLE_EVENT_STREAMS, true),
+  // DaddyLive (dlhd) mirror list + whether to surface its (best-effort) events.
+  DLHD_URLS: (process.env.DLHD_URLS || 'https://dlhd.pk')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
+  DLHD_ENABLE_EVENTS: parseBool(process.env.DLHD_ENABLE_EVENTS, true),
   // How often to re-scrape the per-sport listing pages. The chids that back
   // event entries are slot ids reused across the day, so frequent refresh
   // matters more here than for the TV channel cache.
