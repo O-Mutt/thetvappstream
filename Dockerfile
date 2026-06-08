@@ -7,7 +7,9 @@ COPY package*.json ./
 # headless solver (with its OS libraries). Sources that don't use the solver
 # (thetvapp) never launch it, but the binary must be present for those that do.
 RUN npm install --omit=dev --no-audit --no-fund \
+  && apt-get update \
   && npx playwright install --with-deps chromium \
+  && rm -rf /var/lib/apt/lists/* \
   && npm cache clean --force
 
 COPY . .
