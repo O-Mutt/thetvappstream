@@ -83,8 +83,10 @@ app.listen(PORT, () => {
 
 aggregator
   .ensureReady()
-  // Prime the stream index (so /channel resolves before the first M3U fetch),
-  // then build the EPG.
+  // Load events, prime the stream index (so /channel resolves before the first
+  // M3U fetch), then build the EPG. refreshEvents must run before the first
+  // listM3uEntries or the initial M3U/EPG ships with no event channels.
+  .then(() => aggregator.refreshEvents())
   .then(() => aggregator.listM3uEntries())
   .then(() => aggregator.refreshEpg())
   .catch(e => console.error(`startup warmup: ${e.message}`));
