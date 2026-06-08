@@ -36,12 +36,9 @@ async function getBrowser() {
   }
 }
 
-async function withPage(fn, { referer, userAgent = DEFAULT_UA } = {}) {
+async function withPage(fn, { userAgent = DEFAULT_UA } = {}) {
   const browser = await getBrowser();
-  const context = await browser.newContext({
-    userAgent,
-    extraHTTPHeaders: referer ? { Referer: referer } : {},
-  });
+  const context = await browser.newContext({ userAgent });
   const page = await context.newPage();
   try {
     return await fn(page);
@@ -51,14 +48,15 @@ async function withPage(fn, { referer, userAgent = DEFAULT_UA } = {}) {
 }
 
 // Render a URL and return the resulting HTML (gets past JS/bot shells that a
-// plain GET can't).
+// plain GET can't). `referer` is applied to the navigation only, so sub-resource
+// requests keep their natural (page-origin) referer.
 async function fetchRendered(url, { referer, userAgent, timeoutMs = 25000 } = {}) {
   return withPage(
     async page => {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs, referer });
       return page.content();
     },
-    { referer, userAgent },
+    { userAgent },
   );
 }
 
@@ -84,12 +82,14 @@ async function sniffStream(
           }
         });
       });
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs }).catch(() => {});
+      await page
+        .goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs, referer })
+        .catch(() => {});
       await Promise.race([seen, page.waitForTimeout(timeoutMs)]);
       if (!captured) throw new Error(`no stream manifest observed at ${url}`);
       return captured;
     },
-    { referer, userAgent },
+    { userAgent },
   );
 }
 
