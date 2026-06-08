@@ -133,44 +133,55 @@ class ChannelManager {
     this.eventManager = em;
   }
 
+  // Linear-channel EPG only, as { items, programmesByChid }. Event folding and
+  // cross-provider merging now happen in the Aggregator, so this returns just
+  // this source's own channels — the unit the provider abstraction consumes.
+  async collectEpgData() {
+    const channels = await this.listChannels();
+    const logosByName = await loadLogosByName();
+    const items = Object.entries(channels)
+      .filter(([, chid]) => this.guideIds[chid])
+      .map(([name, chid]) => ({
+        name,
+        chid,
+        guideId: this.guideIds[chid],
+        logo: logosByName.get(name) || null,
+      }));
+
+    const programmesByChid = {};
+    await runWithConcurrency(items, 4, async item => {
+      try {
+        const r = await this.getWithRetry(`/json/${item.guideId}.json`);
+        if (r.status === 200 && Array.isArray(r.data)) {
+          programmesByChid[item.chid] = r.data;
+        }
+      } catch (e) {
+        console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
+      }
+    });
+
+    return {
+      items: items.map(({ name, chid, logo }) => ({ name, chid, logo })),
+      programmesByChid,
+    };
+  }
+
   async refreshEpg() {
     if (this.epgRefreshing) return this.epgRefreshing;
     this.epgRefreshing = (async () => {
-      const channels = await this.listChannels();
-      const logosByName = await loadLogosByName();
-      const items = Object.entries(channels)
-        .filter(([, chid]) => this.guideIds[chid])
-        .map(([name, chid]) => ({
-          name,
-          chid,
-          guideId: this.guideIds[chid],
-          logo: logosByName.get(name) || null,
-        }));
-
-      const programmesByChid = {};
-      await runWithConcurrency(items, 4, async item => {
-        try {
-          const r = await this.getWithRetry(`/json/${item.guideId}.json`);
-          if (r.status === 200 && Array.isArray(r.data)) {
-            programmesByChid[item.chid] = r.data;
-          }
-        } catch (e) {
-          console.error(`epg ${item.name} (${item.guideId}): ${e.message}`);
-        }
-      });
-
+      const base = await this.collectEpgData();
       const extras = this.eventManager ? this.eventManager.getEpgFragment() : null;
-      const allItems = extras ? [...items, ...extras.items] : items;
+      const allItems = extras ? [...base.items, ...extras.items] : base.items;
       const allProgrammes = extras
-        ? { ...programmesByChid, ...extras.programmesByChid }
-        : programmesByChid;
+        ? { ...base.programmesByChid, ...extras.programmesByChid }
+        : base.programmesByChid;
 
       const { xml, programmeCount } = buildXmltv(allItems, allProgrammes);
       this.epgXml = xml;
       this.epgLastRefresh = Date.now();
       const extraChannelCount = extras ? extras.items.length : 0;
       console.log(
-        `[epg] refreshed: ${items.length} channels` +
+        `[epg] refreshed: ${base.items.length} channels` +
           (extraChannelCount ? ` + ${extraChannelCount} events` : '') +
           `, ${programmeCount} programmes`,
       );

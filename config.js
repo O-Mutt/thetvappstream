@@ -13,6 +13,12 @@ function parsePositiveInt(v, fallback) {
 
 module.exports = {
   PORT: process.env.PORT || 5000,
+  // Ordered list of enabled stream sources (see providers/index.js registry).
+  // First-listed wins for same-game event fallback ordering.
+  PROVIDERS: (process.env.PROVIDERS || 'thetvapp')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
   TV_URL: process.env.TV_URL || 'https://thetvapp.to',
   // Optional. When set, the M3U playlist emits channel URLs prefixed with this
   // value (e.g. https://thetvapp-proxy.example.com). When unset, the prefix is
