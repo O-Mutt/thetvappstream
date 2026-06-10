@@ -2,8 +2,10 @@ const cheerio = require('cheerio');
 const browser = require('../../browser');
 
 // stream-<id>.php embeds the player as:
-//   <iframe src="https://<rotating-host>/premiumtv/daddy3.php?id=<id>">
-const EMBED_RE = /premiumtv\/daddy3\.php\?id=\d+/i;
+//   <iframe src="https://<rotating-host>/premiumtv/daddy<N>.php?id=<id>">
+// dlhd assigns different player variants per channel — daddy.php, daddy2.php,
+// daddy3.php, daddy4.php, ... — all the same embed shape, so match any digit.
+const EMBED_RE = /premiumtv\/daddy\d*\.php\?id=\d+/i;
 
 // Pull the daddy3 embed URL out of a stream page. Exported for unit testing the
 // deterministic hop without a browser.
@@ -15,7 +17,7 @@ function extractEmbedUrl(streamHtml) {
     if (s && EMBED_RE.test(s)) src = s;
   });
   if (!src) {
-    const m = /["'](https?:\/\/[^"']*premiumtv\/daddy3\.php\?id=\d+)["']/i.exec(streamHtml || '');
+    const m = /["'](https?:\/\/[^"']*premiumtv\/daddy\d*\.php\?id=\d+)["']/i.exec(streamHtml || '');
     if (m) src = m[1];
   }
   return src ? src.replace(/^\/\//, 'https://') : null;
@@ -41,7 +43,7 @@ async function resolveDaddyStream(base, id, deps = {}) {
   const streamUrl = `${base}/stream/stream-${id}.php`;
   const html = await fetchPage(streamUrl);
   const embed = extractEmbedUrl(html);
-  if (!embed) throw new Error(`daddylive: no daddy3 embed for id=${id}`);
+  if (!embed) throw new Error(`daddylive: no daddy embed for id=${id}`);
 
   const embedOrigin = new URL(embed).origin;
   const result = await sniff(embed, { referer: `${base}/` });
