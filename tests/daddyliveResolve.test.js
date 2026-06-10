@@ -31,6 +31,16 @@ test('extractEmbedUrl falls back to a regex match outside an iframe tag', () => 
   assert.strictEqual(extractEmbedUrl(html), 'https://h.tld/premiumtv/daddy3.php?id=9');
 });
 
+test('extractEmbedUrl matches all daddy<N>.php variants (daddy, daddy2, daddy4)', () => {
+  for (const v of ['daddy', 'daddy2', 'daddy4']) {
+    const html = `<iframe src="https://donis.jimpenopisonline.online/premiumtv/${v}.php?id=399"></iframe>`;
+    assert.strictEqual(
+      extractEmbedUrl(html),
+      `https://donis.jimpenopisonline.online/premiumtv/${v}.php?id=399`,
+    );
+  }
+});
+
 test('extractEmbedUrl returns null when no embed present', () => {
   assert.strictEqual(extractEmbedUrl('<html>nope</html>'), null);
 });
@@ -80,6 +90,6 @@ test('resolveDaddyStream throws when the embed is missing', async () => {
       resolveDaddyStream('https://dlhd.pk', '51', {
         fetchPage: async () => '<html>blocked</html>',
       }),
-    /no daddy3 embed/,
+    /no daddy embed/,
   );
 });
