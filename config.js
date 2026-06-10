@@ -20,10 +20,12 @@ module.exports = {
     .map(s => s.trim())
     .filter(Boolean),
   TV_URL: process.env.TV_URL || 'https://thetvapp.to',
-  // Ordered mirror list for the thetvapp source. Domains rotate, so list known
-  // alternates (comma-separated) and the resolver fails over to the first live
-  // one. Falls back to TV_URL for backward compatibility.
-  THETVAPP_URLS: (process.env.THETVAPP_URLS || process.env.TV_URL || 'https://thetvapp.to')
+  // Ordered mirror list for the thetvapp source. The original thetvapp.to backend
+  // was taken down (June 2026); the app relocated to the-tv.app (same brand, new
+  // site structure — event-only, JS player). Domains rotate, so list known
+  // alternates and the resolver fails over to the first live one. Deliberately
+  // NOT chained off the dead TV_URL anymore.
+  THETVAPP_URLS: (process.env.THETVAPP_URLS || 'https://the-tv.app,https://thetvapp.link')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean),
@@ -41,6 +43,10 @@ module.exports = {
     .map(s => s.trim())
     .filter(Boolean),
   DLHD_ENABLE_EVENTS: parseBool(process.env.DLHD_ENABLE_EVENTS, true),
+  // dlhd's 24/7 linear channels have no EPG (they render as empty guide rows).
+  // Set false to serve dlhd events only — useful when an EPG-bearing source
+  // (the-tv.app) is primary and the empty linear rows aren't wanted.
+  DLHD_ENABLE_LINEAR: parseBool(process.env.DLHD_ENABLE_LINEAR, true),
   // How often to re-scrape the per-sport listing pages. The chids that back
   // event entries are slot ids reused across the day, so frequent refresh
   // matters more here than for the TV channel cache.

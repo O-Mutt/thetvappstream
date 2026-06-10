@@ -4,7 +4,7 @@ const MirrorResolver = require('../../MirrorResolver');
 const browser = require('../../browser');
 const { parseChannels, parseSchedule } = require('./parse');
 const { resolveDaddyStream } = require('./resolve');
-const { DLHD_URLS, DLHD_ENABLE_EVENTS } = require('../../config');
+const { DLHD_URLS, DLHD_ENABLE_EVENTS, DLHD_ENABLE_LINEAR } = require('../../config');
 
 const UA = browser.DEFAULT_UA;
 const CHANNELS_PATH = '/24-7-channels.php';
@@ -14,9 +14,14 @@ const SCHEDULE_PATH = '/schedule/schedule-generated.json';
 // schedule JSON; stream resolution goes through the headless solver because the
 // player is obfuscated and the CDN is Referer-locked.
 class DaddyLiveProvider extends Provider {
-  constructor({ urls = DLHD_URLS, enableEvents = DLHD_ENABLE_EVENTS } = {}) {
+  constructor({
+    urls = DLHD_URLS,
+    enableEvents = DLHD_ENABLE_EVENTS,
+    enableLinear = DLHD_ENABLE_LINEAR,
+  } = {}) {
     super();
     this.enableEvents = enableEvents;
+    this.enableLinear = enableLinear;
     this.mirrors = new MirrorResolver('daddylive', urls, { probe: u => this._probe(u) });
     this.client = axios.create({
       headers: { 'User-Agent': UA, Accept: '*/*' },
@@ -72,6 +77,13 @@ class DaddyLiveProvider extends Provider {
   }
 
   async listLinearChannels() {
+    // dlhd's ~900 24/7 channels carry no EPG, so they show as empty guide rows
+    // downstream. When the-tv.app (or another EPG source) is primary, disable
+    // them to keep the guide clean — dlhd still contributes events.
+    if (!this.enableLinear) {
+      this.channelsCache = {};
+      return {};
+    }
     const base = this.base();
     let channels = {};
     try {
