@@ -43,6 +43,10 @@ module.exports = {
     .map(s => s.trim())
     .filter(Boolean),
   DLHD_ENABLE_EVENTS: parseBool(process.env.DLHD_ENABLE_EVENTS, true),
+  // Reject the dlhd schedule when its date header drifts more than this many
+  // days from today. dlhd has served a frozen March-2025 schedule for months;
+  // without this guard every year-old fixture is relabeled as a live "today" event.
+  DLHD_MAX_STALE_DAYS: parsePositiveInt(process.env.DLHD_MAX_STALE_DAYS, 2),
   // dlhd's 24/7 linear channels have no EPG (they render as empty guide rows).
   // Set false to serve dlhd events only — useful when an EPG-bearing source
   // (the-tv.app) is primary and the empty linear rows aren't wanted.

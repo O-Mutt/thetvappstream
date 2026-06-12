@@ -4,7 +4,12 @@ const MirrorResolver = require('../../MirrorResolver');
 const browser = require('../../browser');
 const { parseChannels, parseSchedule } = require('./parse');
 const { resolveDaddyStream } = require('./resolve');
-const { DLHD_URLS, DLHD_ENABLE_EVENTS, DLHD_ENABLE_LINEAR } = require('../../config');
+const {
+  DLHD_URLS,
+  DLHD_ENABLE_EVENTS,
+  DLHD_ENABLE_LINEAR,
+  DLHD_MAX_STALE_DAYS,
+} = require('../../config');
 
 const UA = browser.DEFAULT_UA;
 const CHANNELS_PATH = '/24-7-channels.php';
@@ -18,10 +23,12 @@ class DaddyLiveProvider extends Provider {
     urls = DLHD_URLS,
     enableEvents = DLHD_ENABLE_EVENTS,
     enableLinear = DLHD_ENABLE_LINEAR,
+    maxStaleDays = DLHD_MAX_STALE_DAYS,
   } = {}) {
     super();
     this.enableEvents = enableEvents;
     this.enableLinear = enableLinear;
+    this.maxStaleDays = maxStaleDays;
     this.mirrors = new MirrorResolver('daddylive', urls, { probe: u => this._probe(u) });
     this.client = axios.create({
       headers: { 'User-Agent': UA, Accept: '*/*' },
@@ -116,7 +123,14 @@ class DaddyLiveProvider extends Provider {
       const r = await this._get(SCHEDULE_PATH);
       if (r && r.status === 200) {
         const json = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-        this.eventsCache = parseSchedule(json);
+        this.eventsCache = parseSchedule(json, {
+          maxStaleDays: this.maxStaleDays,
+          onStaleDay: ({ dayKey, driftDays }) =>
+            console.warn(
+              `[daddylive] rejected stale schedule day "${dayKey}" (${driftDays}d from today); ` +
+                `mirror ${this.base()} is frozen — contributing 0 events`
+            ),
+        });
         console.log(`[daddylive] schedule: ${this.eventsCache.length} current event(s)`);
       }
     } catch (e) {

@@ -131,6 +131,41 @@ function formatEtSuffix(utcSec) {
   return s.replace(',', '');
 }
 
+const MONTHS = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+// Pull a calendar date out of a dlhd schedule day key, e.g.
+// "Thursday 20th March 2025 - Schedule Time UK GMT" -> { y: 2025, m: 3, d: 20 }.
+// Returns null when the key has no parseable date (some mirrors use bare labels
+// like "Day" or a localized string we don't recognize).
+function parseScheduleHeaderDate(dayKey) {
+  const m = /(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?\s+(\d{4})/.exec(String(dayKey || ''));
+  if (!m) return null;
+  const month = MONTHS[m[2].toLowerCase()];
+  if (!month) return null;
+  const d = Number(m[1]);
+  const y = Number(m[3]);
+  if (d < 1 || d > 31) return null;
+  return { y, m: month, d };
+}
+
+// Whole-day signed drift (b - a) between two {y,m,d} dates, ignoring time.
+function dayDrift(a, b) {
+  return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
+}
+
 function leagueAndMatchup(eventStr, categoryLabel) {
   const str = String(eventStr || '').trim();
   const idx = str.indexOf(' : ');
@@ -141,25 +176,44 @@ function leagueAndMatchup(eventStr, categoryLabel) {
   return { league, matchup: str };
 }
 
-// Parse the schedule JSON into normalized events. The schedule's date header is
-// unreliable (mirrors serve stale labels), so times are interpreted as TODAY in
-// the schedule's timezone and anything outside the relevance window is dropped.
+// Parse the schedule JSON into normalized events. Event times carry no date, so
+// they're interpreted as TODAY in the schedule's timezone and anything outside
+// the relevance window is dropped.
+//
+// Freshness gate: a frozen mirror (dlhd has served a March-2025 schedule for
+// months) would otherwise have its year-old fixtures relabeled as live "today".
+// When a day key carries a parseable date that drifts more than `maxStaleDays`
+// from today, that whole day is rejected and `onStaleDay` is notified — the
+// provider then contributes nothing rather than faking a guide full of phantom
+// games. Unparseable headers fall through to the relabel-to-today path, since
+// some mirrors genuinely mislabel an otherwise-current schedule.
 //
 // opts: { nowSec, scheduleTz='Europe/London', graceMin=45, maxAheadHours=36,
-//         skipCategories=[/tv shows/i] }
+//         maxStaleDays=2, skipCategories=[/tv shows/i], onStaleDay=null }
 function parseSchedule(scheduleJson, opts = {}) {
   const {
     nowSec = Math.floor(Date.now() / 1000),
     scheduleTz = 'Europe/London',
     graceMin = 45,
     maxAheadHours = 36,
+    maxStaleDays = 2,
     skipCategories = [/tv shows/i, /tv channels/i],
+    onStaleDay = null,
   } = opts;
 
   const today = ymdInZone(nowSec, scheduleTz);
   const events = [];
 
   for (const dayKey of Object.keys(scheduleJson || {})) {
+    const headerDate = parseScheduleHeaderDate(dayKey);
+    if (headerDate) {
+      const driftDays = dayDrift(today, headerDate);
+      if (Math.abs(driftDays) > maxStaleDays) {
+        if (onStaleDay) onStaleDay({ dayKey, headerDate, today, driftDays });
+        continue;
+      }
+    }
+
     const categories = scheduleJson[dayKey] || {};
     for (const catKey of Object.keys(categories)) {
       const category = cleanLabel(catKey);
@@ -205,6 +259,7 @@ function parseSchedule(scheduleJson, opts = {}) {
 module.exports = {
   parseChannels,
   parseSchedule,
+  parseScheduleHeaderDate,
   leagueAndMatchup,
   cleanLabel,
   zonedToUtcSec,
