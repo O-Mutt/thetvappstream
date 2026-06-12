@@ -4,6 +4,7 @@ const {
   parseChannels,
   parseSchedule,
   parseScheduleHeaderDate,
+  formatEventSuffix,
   leagueAndMatchup,
   zonedToUtcSec,
 } = require('../providers/daddylive/parse');
@@ -97,12 +98,13 @@ const SCHEDULE_NO_DATE = {
 };
 
 test('parseSchedule keeps current sport events, drops TV Shows and stale ones', () => {
-  const events = parseSchedule(SCHEDULE, { nowSec: NOW });
+  const events = parseSchedule(SCHEDULE, { nowSec: NOW, displayTz: 'America/Chicago' });
   assert.strictEqual(events.length, 1, 'only the live MLB game survives');
   const e = events[0];
   assert.strictEqual(e.league, 'MLB');
   assert.match(e.name, /^Boston Red Sox vs Minnesota Twins @ /);
-  assert.match(e.name, /3:00 PM$/); // formatted in ET
+  // 20:00 London (BST) == 19:00 UTC == 2:00 PM CDT, labeled with the zone
+  assert.match(e.name, /2:00 PM CDT$/);
   assert.strictEqual(e.streamRef, '742');
   assert.deepStrictEqual(e.channelIds, ['742', '999']); // primary + backup feed
   assert.strictEqual(e.endSec, e.startSec + 210 * 60); // MLB duration
@@ -136,6 +138,17 @@ test('parseSchedule keeps a schedule within the stale tolerance', () => {
 test('parseSchedule still processes day keys with no parseable date', () => {
   const events = parseSchedule(SCHEDULE_NO_DATE, { nowSec: NOW });
   assert.strictEqual(events.length, 1, 'unparseable header falls through to relabel-to-today');
+});
+
+test('formatEventSuffix renders a DST-accurate Central label', () => {
+  // 2026-06-12 19:00 UTC -> Central Daylight (UTC-5) -> 2:00 PM CDT
+  const summer = Date.parse('2026-06-12T19:00:00Z') / 1000;
+  assert.strictEqual(formatEventSuffix(summer, 'America/Chicago'), 'Jun 12 2:00 PM CDT');
+  // 2026-01-12 19:00 UTC -> Central Standard (UTC-6) -> 1:00 PM CST
+  const winter = Date.parse('2026-01-12T19:00:00Z') / 1000;
+  assert.strictEqual(formatEventSuffix(winter, 'America/Chicago'), 'Jan 12 1:00 PM CST');
+  // an explicit zone override still works (Eastern)
+  assert.strictEqual(formatEventSuffix(summer, 'America/New_York'), 'Jun 12 3:00 PM EDT');
 });
 
 test('parseScheduleHeaderDate extracts the date or returns null', () => {

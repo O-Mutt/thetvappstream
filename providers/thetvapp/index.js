@@ -2,7 +2,7 @@ const axios = require('axios');
 const Provider = require('../Provider');
 const MirrorResolver = require('../../MirrorResolver');
 const { runWithConcurrency } = require('../../ChannelManager');
-const { formatEtSuffix, LEAGUE_DURATION_MIN } = require('../daddylive/parse');
+const { formatEventSuffix, LEAGUE_DURATION_MIN } = require('../daddylive/parse');
 const { pickEventLogo } = require('../../eventLogos');
 const { DEFAULT_UA: UA } = require('../../browser');
 const { THETVAPP_URLS } = require('../../config');
@@ -126,7 +126,7 @@ class TheTvAppProvider extends Provider {
         if (start > nowSec + MAX_AHEAD_HOURS * 3600) return;
         events.push({
           league: ev.league,
-          name: `${ev.matchup} @ ${formatEtSuffix(start)}`,
+          name: `${ev.matchup} @ ${formatEventSuffix(start)}`,
           startSec: start,
           endSec,
           streamRef: ev.href, // resolved lazily; embed hosts rotate so re-fetch at play time

@@ -37,6 +37,12 @@ module.exports = {
   // When true, scrape per-game event pages (MLB/NHL/NFL/NBA/NCAAF/NCAAB/Soccer/PPV)
   // and merge them into /channels.m3u and /epg.xml alongside the linear TV channels.
   ENABLE_EVENT_STREAMS: parseBool(process.env.ENABLE_EVENT_STREAMS, true),
+  // IANA zone the "@ <time>" suffix in event names is rendered in. The label
+  // carries a DST-accurate abbreviation (CDT/CST). NOTE: the Dispatcharr
+  // team-recordings scheduler re-parses this time using its own source_timezone
+  // (/etc/dispatcharr-local/team-rules.json) — keep the two in sync or recordings
+  // shift by the UTC offset between them.
+  EVENT_DISPLAY_TZ: process.env.EVENT_DISPLAY_TZ || 'America/Chicago',
   // DaddyLive (dlhd) mirror list + whether to surface its (best-effort) events.
   DLHD_URLS: (process.env.DLHD_URLS || 'https://dlhd.pk')
     .split(',')

@@ -1,4 +1,5 @@
 const cheerio = require('cheerio');
+const { EVENT_DISPLAY_TZ } = require('../../config');
 
 // Pure parsing for DaddyLive (dlhd) inputs: the 24-7 channel index and the
 // schedule JSON. No network or browser here so it stays deterministic and
@@ -117,18 +118,24 @@ function ymdInZone(utcSec, timeZone) {
   return { y: +p.year, m: +p.month, d: +p.day };
 }
 
-// Display name in US Eastern, matching the "@ <time>" suffix the Dispatcharr
-// scheduler parses. "Jun 8 7:10 PM".
-function formatEtSuffix(utcSec) {
-  const s = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
+// Display time for the "@ <time>" suffix the Dispatcharr scheduler parses, e.g.
+// "Jun 8 7:10 PM CDT". The trailing tz abbreviation is DST-accurate (CDT/CST)
+// and sits past the AM/PM the scheduler's regex stops at, so it's label-only.
+function formatEventSuffix(utcSec, timeZone = EVENT_DISPLAY_TZ) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  }).format(new Date(utcSec * 1000));
-  return s.replace(',', '');
+    timeZoneName: 'short',
+  }).formatToParts(new Date(utcSec * 1000));
+  const get = t => (parts.find(p => p.type === t) || {}).value || '';
+  const tz = get('timeZoneName');
+  return `${get('month')} ${get('day')} ${get('hour')}:${get('minute')} ${get('dayPeriod')}${
+    tz ? ' ' + tz : ''
+  }`;
 }
 
 const MONTHS = {
@@ -199,6 +206,7 @@ function parseSchedule(scheduleJson, opts = {}) {
     maxStaleDays = 2,
     skipCategories = [/tv shows/i, /tv channels/i],
     onStaleDay = null,
+    displayTz = EVENT_DISPLAY_TZ,
   } = opts;
 
   const today = ymdInZone(nowSec, scheduleTz);
@@ -242,7 +250,7 @@ function parseSchedule(scheduleJson, opts = {}) {
 
         events.push({
           league,
-          name: `${matchup} @ ${formatEtSuffix(startSec)}`,
+          name: `${matchup} @ ${formatEventSuffix(startSec, displayTz)}`,
           startSec,
           endSec,
           streamRef: channels[0], // primary feed; extra feeds are fallback-eligible
@@ -263,7 +271,7 @@ module.exports = {
   leagueAndMatchup,
   cleanLabel,
   zonedToUtcSec,
-  formatEtSuffix,
+  formatEventSuffix,
   CATEGORY_LEAGUE,
   LEAGUE_DURATION_MIN,
 };
