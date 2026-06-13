@@ -124,7 +124,7 @@ class DaddyLiveProvider extends Provider {
       onStaleDay: ({ dayKey, driftDays }) =>
         console.warn(
           `[daddylive] rejected stale schedule day "${dayKey}" (${driftDays}d from today); ` +
-            `mirror ${this.base()} is frozen — contributing 0 events`
+            `mirror ${this.base()} is frozen — contributing 0 events`,
         ),
     };
 

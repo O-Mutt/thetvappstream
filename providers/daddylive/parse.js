@@ -265,8 +265,18 @@ function parseSchedule(scheduleJson, opts = {}) {
 }
 
 const MONTH_ABBR = {
-  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
-  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
 };
 
 // Pull a {m, d} out of a label containing a "Mon DD" token, e.g. a dlhd category
@@ -274,7 +284,7 @@ const MONTH_ABBR = {
 // schedule's header date. Returns null when no month/day token is present.
 function extractMonthDay(label) {
   const m = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i.exec(
-    String(label || '')
+    String(label || ''),
   );
   if (!m) return null;
   return { m: MONTH_ABBR[m[1].toLowerCase()], d: Number(m[2]) };

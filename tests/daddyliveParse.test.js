@@ -119,18 +119,23 @@ test('parseSchedule anchors event times to today', () => {
 
 test('parseSchedule rejects a schedule whose header date is far stale', () => {
   const stale = {
-    'Thursday 20th March 2025 - Schedule Time UK GMT': SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
+    'Thursday 20th March 2025 - Schedule Time UK GMT':
+      SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
   };
   const seen = [];
   const events = parseSchedule(stale, { nowSec: NOW, onStaleDay: info => seen.push(info) });
   assert.deepStrictEqual(events, [], 'frozen mirror contributes no phantom events');
   assert.strictEqual(seen.length, 1);
-  assert.strictEqual(seen[0].driftDays, Math.round((Date.UTC(2025, 2, 20) - Date.UTC(2026, 5, 8)) / 86400000));
+  assert.strictEqual(
+    seen[0].driftDays,
+    Math.round((Date.UTC(2025, 2, 20) - Date.UTC(2026, 5, 8)) / 86400000),
+  );
 });
 
 test('parseSchedule keeps a schedule within the stale tolerance', () => {
   const tomorrow = {
-    'Tuesday 9th June 2026 - Schedule Time UK GMT': SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
+    'Tuesday 9th June 2026 - Schedule Time UK GMT':
+      SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
   };
   const events = parseSchedule(tomorrow, { nowSec: NOW });
   assert.strictEqual(events.length, 1, 'a 1-day drift is within tolerance');
@@ -203,11 +208,14 @@ test('parseScheduleHtml rejects a stale homepage via the freshness gate', () => 
 });
 
 test('parseScheduleHeaderDate extracts the date or returns null', () => {
-  assert.deepStrictEqual(parseScheduleHeaderDate('Thursday 20th March 2025 - Schedule Time UK GMT'), {
-    y: 2025,
-    m: 3,
-    d: 20,
-  });
+  assert.deepStrictEqual(
+    parseScheduleHeaderDate('Thursday 20th March 2025 - Schedule Time UK GMT'),
+    {
+      y: 2025,
+      m: 3,
+      d: 20,
+    },
+  );
   assert.deepStrictEqual(parseScheduleHeaderDate('Monday 8th June 2026 - Schedule Time UK GMT'), {
     y: 2026,
     m: 6,
