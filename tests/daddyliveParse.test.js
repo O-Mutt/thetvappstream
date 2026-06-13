@@ -4,6 +4,7 @@ const {
   parseChannels,
   parseSchedule,
   parseScheduleHeaderDate,
+  parseScheduleHtml,
   formatEventSuffix,
   leagueAndMatchup,
   zonedToUtcSec,
@@ -149,6 +150,56 @@ test('formatEventSuffix renders a DST-accurate Central label', () => {
   assert.strictEqual(formatEventSuffix(winter, 'America/Chicago'), 'Jan 12 1:00 PM CST');
   // an explicit zone override still works (Eastern)
   assert.strictEqual(formatEventSuffix(summer, 'America/New_York'), 'Jun 12 3:00 PM EDT');
+});
+
+// Mirrors the live dlhd homepage DOM: one day header, categories with a
+// .card__meta label, events with .schedule__time[data-time] + .schedule__eventTitle,
+// and .schedule__channels anchors carrying watch.php?id=N. Includes a future-dated
+// category that must be skipped.
+const HOMEPAGE_HTML = `
+<div class="schedule__dayTitle">Monday 8th June 2026 - Schedule Time UK GMT</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">Soccer</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader" data-title="x">
+        <span class="schedule__time" data-time="19:00">19:00</span>
+        <span class="schedule__eventTitle">Canada vs Bosnia and Herzegovina</span>
+      </div>
+      <div class="schedule__channels">
+        <a target="_blank" href="/watch.php?id=211" data-ch="event">Feed 1</a>
+        <a target="_blank" href="/watch.php?id=5016" data-ch="event">Feed 2</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">FIFA World Cup 2026 — Upcoming Matches Jun 10</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="20:00">20:00</span>
+        <span class="schedule__eventTitle">Future Game vs Other Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=999">Feed</a></div>
+    </div>
+  </div>
+</div>`;
+
+test('parseScheduleHtml parses the live homepage and extracts watch.php channel ids', () => {
+  const events = parseScheduleHtml(HOMEPAGE_HTML, { nowSec: NOW, displayTz: 'America/Chicago' });
+  assert.strictEqual(events.length, 1, 'today Soccer game kept; future-dated category skipped');
+  const e = events[0];
+  assert.strictEqual(e.league, 'Soccer');
+  // 19:00 London (BST) == 18:00 UTC == 1:00 PM CDT
+  assert.match(e.name, /^Canada vs Bosnia and Herzegovina @ Jun \d+ 1:00 PM CDT$/);
+  assert.strictEqual(e.streamRef, '211');
+  assert.deepStrictEqual(e.channelIds, ['211', '5016']);
+});
+
+test('parseScheduleHtml rejects a stale homepage via the freshness gate', () => {
+  const stale = HOMEPAGE_HTML.replace('Monday 8th June 2026', 'Thursday 20th March 2025');
+  assert.deepStrictEqual(parseScheduleHtml(stale, { nowSec: NOW }), []);
 });
 
 test('parseScheduleHeaderDate extracts the date or returns null', () => {

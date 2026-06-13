@@ -264,9 +264,68 @@ function parseSchedule(scheduleJson, opts = {}) {
   return events;
 }
 
+const MONTH_ABBR = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+};
+
+// Pull a {m, d} out of a label containing a "Mon DD" token, e.g. a dlhd category
+// "... Upcoming Matches Jun 13 ...". Year-less, so callers compare against the
+// schedule's header date. Returns null when no month/day token is present.
+function extractMonthDay(label) {
+  const m = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i.exec(
+    String(label || '')
+  );
+  if (!m) return null;
+  return { m: MONTH_ABBR[m[1].toLowerCase()], d: Number(m[2]) };
+}
+
+// Parse the live, server-rendered dlhd homepage into normalized events. dlhd's
+// static schedule-generated.json froze in March 2025; the homepage HTML is the
+// fresh source. Reshapes the `schedule__*` DOM into the same intermediate map
+// parseSchedule consumes, then delegates so the freshness gate, league mapping,
+// relevance window, and tz formatting are all reused.
+//
+// dlhd lists future days ("Upcoming Matches Jun 13/14/15") as extra categories
+// under one day header; those dated-to-another-day sections are skipped so their
+// times aren't relabeled onto today. opts are forwarded to parseSchedule.
+function parseScheduleHtml(html, opts = {}) {
+  const $ = cheerio.load(html || '');
+  const dayTitle = $('.schedule__dayTitle').first().text().trim();
+  const headerDate = parseScheduleHeaderDate(dayTitle);
+  const byCategory = {};
+
+  $('.schedule__category').each((_, catEl) => {
+    const category = $(catEl).find('.card__meta').first().text().trim();
+    if (!category) return;
+    const md = extractMonthDay(category);
+    if (md && headerDate && (md.m !== headerDate.m || md.d !== headerDate.d)) return;
+
+    const list = byCategory[category] || (byCategory[category] = []);
+    $(catEl)
+      .find('.schedule__event')
+      .each((__, evEl) => {
+        const timeEl = $(evEl).find('.schedule__time').first();
+        const time = (timeEl.attr('data-time') || timeEl.text() || '').trim();
+        const event = $(evEl).find('.schedule__eventTitle').first().text().trim();
+        const channels = [];
+        $(evEl)
+          .find('.schedule__channels a[href*="watch.php?id="]')
+          .each((___, a) => {
+            const mm = /watch\.php\?id=(\d+)/.exec($(a).attr('href') || '');
+            if (mm) channels.push({ channel_id: mm[1] });
+          });
+        if (time && event && channels.length) list.push({ time, event, channels });
+      });
+  });
+
+  return parseSchedule({ [dayTitle || 'Schedule']: byCategory }, opts);
+}
+
 module.exports = {
   parseChannels,
   parseSchedule,
+  parseScheduleHtml,
   parseScheduleHeaderDate,
   leagueAndMatchup,
   cleanLabel,
