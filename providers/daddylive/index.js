@@ -2,9 +2,14 @@ const axios = require('axios');
 const Provider = require('../Provider');
 const MirrorResolver = require('../../MirrorResolver');
 const browser = require('../../browser');
-const { parseChannels, parseSchedule } = require('./parse');
+const { parseChannels, parseSchedule, parseScheduleHtml } = require('./parse');
 const { resolveDaddyStream } = require('./resolve');
-const { DLHD_URLS, DLHD_ENABLE_EVENTS, DLHD_ENABLE_LINEAR } = require('../../config');
+const {
+  DLHD_URLS,
+  DLHD_ENABLE_EVENTS,
+  DLHD_ENABLE_LINEAR,
+  DLHD_MAX_STALE_DAYS,
+} = require('../../config');
 
 const UA = browser.DEFAULT_UA;
 const CHANNELS_PATH = '/24-7-channels.php';
@@ -18,10 +23,12 @@ class DaddyLiveProvider extends Provider {
     urls = DLHD_URLS,
     enableEvents = DLHD_ENABLE_EVENTS,
     enableLinear = DLHD_ENABLE_LINEAR,
+    maxStaleDays = DLHD_MAX_STALE_DAYS,
   } = {}) {
     super();
     this.enableEvents = enableEvents;
     this.enableLinear = enableLinear;
+    this.maxStaleDays = maxStaleDays;
     this.mirrors = new MirrorResolver('daddylive', urls, { probe: u => this._probe(u) });
     this.client = axios.create({
       headers: { 'User-Agent': UA, Accept: '*/*' },
@@ -112,12 +119,39 @@ class DaddyLiveProvider extends Provider {
       this.eventsCache = [];
       return;
     }
+    const parseOpts = {
+      maxStaleDays: this.maxStaleDays,
+      onStaleDay: ({ dayKey, driftDays }) =>
+        console.warn(
+          `[daddylive] rejected stale schedule day "${dayKey}" (${driftDays}d from today); ` +
+            `mirror ${this.base()} is frozen — contributing 0 events`,
+        ),
+    };
+
+    // Primary: the live, server-rendered homepage. dlhd's static
+    // schedule-generated.json froze in March 2025, so the HTML is the fresh source.
+    try {
+      const r = await this._get('/');
+      if (r && r.status === 200 && typeof r.data === 'string') {
+        const events = parseScheduleHtml(r.data, parseOpts);
+        if (events.length) {
+          this.eventsCache = events;
+          console.log(`[daddylive] schedule (html): ${events.length} current event(s)`);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error(`[daddylive] schedule html: ${e.message}`);
+    }
+
+    // Fallback: the static schedule JSON. The freshness gate drops it when frozen,
+    // so this contributes 0 rather than relabeling year-old fixtures as live.
     try {
       const r = await this._get(SCHEDULE_PATH);
       if (r && r.status === 200) {
         const json = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
-        this.eventsCache = parseSchedule(json);
-        console.log(`[daddylive] schedule: ${this.eventsCache.length} current event(s)`);
+        this.eventsCache = parseSchedule(json, parseOpts);
+        console.log(`[daddylive] schedule (json): ${this.eventsCache.length} current event(s)`);
       }
     } catch (e) {
       console.error(`[daddylive] schedule fetch: ${e.message}`);

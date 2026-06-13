@@ -3,6 +3,9 @@ const assert = require('node:assert');
 const {
   parseChannels,
   parseSchedule,
+  parseScheduleHeaderDate,
+  parseScheduleHtml,
+  formatEventSuffix,
   leagueAndMatchup,
   zonedToUtcSec,
 } = require('../providers/daddylive/parse');
@@ -56,8 +59,8 @@ test('zonedToUtcSec handles GMT in winter', () => {
 const NOW = Date.parse('2026-06-08T18:00:00Z') / 1000;
 
 const SCHEDULE = {
-  // deliberately stale/wrong date label, like dlhd serves
-  'Thursday 20th March 2025 - Schedule Time UK GMT': {
+  // header date matches NOW (2026-06-08) so the freshness gate passes
+  'Monday 8th June 2026 - Schedule Time UK GMT': {
     'TV Shows</span>': [
       { time: '12:00', event: "Hell's Kitchen", channels: [{ channel_id: '742' }] },
     ],
@@ -81,23 +84,145 @@ const SCHEDULE = {
   },
 };
 
+// Some mirrors use a bare label with no date; the freshness gate can't judge it
+// so it falls through to the relabel-to-today path.
+const SCHEDULE_NO_DATE = {
+  Day: {
+    'Baseball</span>': [
+      {
+        time: '20:00',
+        event: 'MLB : Boston Red Sox vs Minnesota Twins',
+        channels: [{ channel_id: '742' }],
+      },
+    ],
+  },
+};
+
 test('parseSchedule keeps current sport events, drops TV Shows and stale ones', () => {
-  const events = parseSchedule(SCHEDULE, { nowSec: NOW });
+  const events = parseSchedule(SCHEDULE, { nowSec: NOW, displayTz: 'America/Chicago' });
   assert.strictEqual(events.length, 1, 'only the live MLB game survives');
   const e = events[0];
   assert.strictEqual(e.league, 'MLB');
   assert.match(e.name, /^Boston Red Sox vs Minnesota Twins @ /);
-  assert.match(e.name, /3:00 PM$/); // formatted in ET
+  // 20:00 London (BST) == 19:00 UTC == 2:00 PM CDT, labeled with the zone
+  assert.match(e.name, /2:00 PM CDT$/);
   assert.strictEqual(e.streamRef, '742');
   assert.deepStrictEqual(e.channelIds, ['742', '999']); // primary + backup feed
   assert.strictEqual(e.endSec, e.startSec + 210 * 60); // MLB duration
 });
 
-test('parseSchedule ignores the stale date header and uses "today"', () => {
+test('parseSchedule anchors event times to today', () => {
   const events = parseSchedule(SCHEDULE, { nowSec: NOW });
-  // event start is computed from NOW's date, not "March 2025"
   const startIso = new Date(events[0].startSec * 1000).toISOString();
   assert.match(startIso, /^2026-06-08T19:00:00/);
+});
+
+test('parseSchedule rejects a schedule whose header date is far stale', () => {
+  const stale = {
+    'Thursday 20th March 2025 - Schedule Time UK GMT':
+      SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
+  };
+  const seen = [];
+  const events = parseSchedule(stale, { nowSec: NOW, onStaleDay: info => seen.push(info) });
+  assert.deepStrictEqual(events, [], 'frozen mirror contributes no phantom events');
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(
+    seen[0].driftDays,
+    Math.round((Date.UTC(2025, 2, 20) - Date.UTC(2026, 5, 8)) / 86400000),
+  );
+});
+
+test('parseSchedule keeps a schedule within the stale tolerance', () => {
+  const tomorrow = {
+    'Tuesday 9th June 2026 - Schedule Time UK GMT':
+      SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
+  };
+  const events = parseSchedule(tomorrow, { nowSec: NOW });
+  assert.strictEqual(events.length, 1, 'a 1-day drift is within tolerance');
+});
+
+test('parseSchedule still processes day keys with no parseable date', () => {
+  const events = parseSchedule(SCHEDULE_NO_DATE, { nowSec: NOW });
+  assert.strictEqual(events.length, 1, 'unparseable header falls through to relabel-to-today');
+});
+
+test('formatEventSuffix renders a DST-accurate Central label', () => {
+  // 2026-06-12 19:00 UTC -> Central Daylight (UTC-5) -> 2:00 PM CDT
+  const summer = Date.parse('2026-06-12T19:00:00Z') / 1000;
+  assert.strictEqual(formatEventSuffix(summer, 'America/Chicago'), 'Jun 12 2:00 PM CDT');
+  // 2026-01-12 19:00 UTC -> Central Standard (UTC-6) -> 1:00 PM CST
+  const winter = Date.parse('2026-01-12T19:00:00Z') / 1000;
+  assert.strictEqual(formatEventSuffix(winter, 'America/Chicago'), 'Jan 12 1:00 PM CST');
+  // an explicit zone override still works (Eastern)
+  assert.strictEqual(formatEventSuffix(summer, 'America/New_York'), 'Jun 12 3:00 PM EDT');
+});
+
+// Mirrors the live dlhd homepage DOM: one day header, categories with a
+// .card__meta label, events with .schedule__time[data-time] + .schedule__eventTitle,
+// and .schedule__channels anchors carrying watch.php?id=N. Includes a future-dated
+// category that must be skipped.
+const HOMEPAGE_HTML = `
+<div class="schedule__dayTitle">Monday 8th June 2026 - Schedule Time UK GMT</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">Soccer</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader" data-title="x">
+        <span class="schedule__time" data-time="19:00">19:00</span>
+        <span class="schedule__eventTitle">Canada vs Bosnia and Herzegovina</span>
+      </div>
+      <div class="schedule__channels">
+        <a target="_blank" href="/watch.php?id=211" data-ch="event">Feed 1</a>
+        <a target="_blank" href="/watch.php?id=5016" data-ch="event">Feed 2</a>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">FIFA World Cup 2026 — Upcoming Matches Jun 10</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="20:00">20:00</span>
+        <span class="schedule__eventTitle">Future Game vs Other Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=999">Feed</a></div>
+    </div>
+  </div>
+</div>`;
+
+test('parseScheduleHtml parses the live homepage and extracts watch.php channel ids', () => {
+  const events = parseScheduleHtml(HOMEPAGE_HTML, { nowSec: NOW, displayTz: 'America/Chicago' });
+  assert.strictEqual(events.length, 1, 'today Soccer game kept; future-dated category skipped');
+  const e = events[0];
+  assert.strictEqual(e.league, 'Soccer');
+  // 19:00 London (BST) == 18:00 UTC == 1:00 PM CDT
+  assert.match(e.name, /^Canada vs Bosnia and Herzegovina @ Jun \d+ 1:00 PM CDT$/);
+  assert.strictEqual(e.streamRef, '211');
+  assert.deepStrictEqual(e.channelIds, ['211', '5016']);
+});
+
+test('parseScheduleHtml rejects a stale homepage via the freshness gate', () => {
+  const stale = HOMEPAGE_HTML.replace('Monday 8th June 2026', 'Thursday 20th March 2025');
+  assert.deepStrictEqual(parseScheduleHtml(stale, { nowSec: NOW }), []);
+});
+
+test('parseScheduleHeaderDate extracts the date or returns null', () => {
+  assert.deepStrictEqual(
+    parseScheduleHeaderDate('Thursday 20th March 2025 - Schedule Time UK GMT'),
+    {
+      y: 2025,
+      m: 3,
+      d: 20,
+    },
+  );
+  assert.deepStrictEqual(parseScheduleHeaderDate('Monday 8th June 2026 - Schedule Time UK GMT'), {
+    y: 2026,
+    m: 6,
+    d: 8,
+  });
+  assert.strictEqual(parseScheduleHeaderDate('Day'), null);
+  assert.strictEqual(parseScheduleHeaderDate(''), null);
 });
 
 test('parseSchedule drops events whose only channel list is empty', () => {

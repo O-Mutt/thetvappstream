@@ -1,4 +1,5 @@
 const cheerio = require('cheerio');
+const { EVENT_DISPLAY_TZ } = require('../../config');
 
 // Pure parsing for DaddyLive (dlhd) inputs: the 24-7 channel index and the
 // schedule JSON. No network or browser here so it stays deterministic and
@@ -117,18 +118,59 @@ function ymdInZone(utcSec, timeZone) {
   return { y: +p.year, m: +p.month, d: +p.day };
 }
 
-// Display name in US Eastern, matching the "@ <time>" suffix the Dispatcharr
-// scheduler parses. "Jun 8 7:10 PM".
-function formatEtSuffix(utcSec) {
-  const s = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
+// Display time for the "@ <time>" suffix the Dispatcharr scheduler parses, e.g.
+// "Jun 8 7:10 PM CDT". The trailing tz abbreviation is DST-accurate (CDT/CST)
+// and sits past the AM/PM the scheduler's regex stops at, so it's label-only.
+function formatEventSuffix(utcSec, timeZone = EVENT_DISPLAY_TZ) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  }).format(new Date(utcSec * 1000));
-  return s.replace(',', '');
+    timeZoneName: 'short',
+  }).formatToParts(new Date(utcSec * 1000));
+  const get = t => (parts.find(p => p.type === t) || {}).value || '';
+  const tz = get('timeZoneName');
+  return `${get('month')} ${get('day')} ${get('hour')}:${get('minute')} ${get('dayPeriod')}${
+    tz ? ' ' + tz : ''
+  }`;
+}
+
+const MONTHS = {
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+
+// Pull a calendar date out of a dlhd schedule day key, e.g.
+// "Thursday 20th March 2025 - Schedule Time UK GMT" -> { y: 2025, m: 3, d: 20 }.
+// Returns null when the key has no parseable date (some mirrors use bare labels
+// like "Day" or a localized string we don't recognize).
+function parseScheduleHeaderDate(dayKey) {
+  const m = /(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\.?\s+(\d{4})/.exec(String(dayKey || ''));
+  if (!m) return null;
+  const month = MONTHS[m[2].toLowerCase()];
+  if (!month) return null;
+  const d = Number(m[1]);
+  const y = Number(m[3]);
+  if (d < 1 || d > 31) return null;
+  return { y, m: month, d };
+}
+
+// Whole-day signed drift (b - a) between two {y,m,d} dates, ignoring time.
+function dayDrift(a, b) {
+  return Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86400000);
 }
 
 function leagueAndMatchup(eventStr, categoryLabel) {
@@ -141,25 +183,45 @@ function leagueAndMatchup(eventStr, categoryLabel) {
   return { league, matchup: str };
 }
 
-// Parse the schedule JSON into normalized events. The schedule's date header is
-// unreliable (mirrors serve stale labels), so times are interpreted as TODAY in
-// the schedule's timezone and anything outside the relevance window is dropped.
+// Parse the schedule JSON into normalized events. Event times carry no date, so
+// they're interpreted as TODAY in the schedule's timezone and anything outside
+// the relevance window is dropped.
+//
+// Freshness gate: a frozen mirror (dlhd has served a March-2025 schedule for
+// months) would otherwise have its year-old fixtures relabeled as live "today".
+// When a day key carries a parseable date that drifts more than `maxStaleDays`
+// from today, that whole day is rejected and `onStaleDay` is notified — the
+// provider then contributes nothing rather than faking a guide full of phantom
+// games. Unparseable headers fall through to the relabel-to-today path, since
+// some mirrors genuinely mislabel an otherwise-current schedule.
 //
 // opts: { nowSec, scheduleTz='Europe/London', graceMin=45, maxAheadHours=36,
-//         skipCategories=[/tv shows/i] }
+//         maxStaleDays=2, skipCategories=[/tv shows/i], onStaleDay=null }
 function parseSchedule(scheduleJson, opts = {}) {
   const {
     nowSec = Math.floor(Date.now() / 1000),
     scheduleTz = 'Europe/London',
     graceMin = 45,
     maxAheadHours = 36,
+    maxStaleDays = 2,
     skipCategories = [/tv shows/i, /tv channels/i],
+    onStaleDay = null,
+    displayTz = EVENT_DISPLAY_TZ,
   } = opts;
 
   const today = ymdInZone(nowSec, scheduleTz);
   const events = [];
 
   for (const dayKey of Object.keys(scheduleJson || {})) {
+    const headerDate = parseScheduleHeaderDate(dayKey);
+    if (headerDate) {
+      const driftDays = dayDrift(today, headerDate);
+      if (Math.abs(driftDays) > maxStaleDays) {
+        if (onStaleDay) onStaleDay({ dayKey, headerDate, today, driftDays });
+        continue;
+      }
+    }
+
     const categories = scheduleJson[dayKey] || {};
     for (const catKey of Object.keys(categories)) {
       const category = cleanLabel(catKey);
@@ -188,7 +250,7 @@ function parseSchedule(scheduleJson, opts = {}) {
 
         events.push({
           league,
-          name: `${matchup} @ ${formatEtSuffix(startSec)}`,
+          name: `${matchup} @ ${formatEventSuffix(startSec, displayTz)}`,
           startSec,
           endSec,
           streamRef: channels[0], // primary feed; extra feeds are fallback-eligible
@@ -202,13 +264,83 @@ function parseSchedule(scheduleJson, opts = {}) {
   return events;
 }
 
+const MONTH_ABBR = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+};
+
+// Pull a {m, d} out of a label containing a "Mon DD" token, e.g. a dlhd category
+// "... Upcoming Matches Jun 13 ...". Year-less, so callers compare against the
+// schedule's header date. Returns null when no month/day token is present.
+function extractMonthDay(label) {
+  const m = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i.exec(
+    String(label || ''),
+  );
+  if (!m) return null;
+  return { m: MONTH_ABBR[m[1].toLowerCase()], d: Number(m[2]) };
+}
+
+// Parse the live, server-rendered dlhd homepage into normalized events. dlhd's
+// static schedule-generated.json froze in March 2025; the homepage HTML is the
+// fresh source. Reshapes the `schedule__*` DOM into the same intermediate map
+// parseSchedule consumes, then delegates so the freshness gate, league mapping,
+// relevance window, and tz formatting are all reused.
+//
+// dlhd lists future days ("Upcoming Matches Jun 13/14/15") as extra categories
+// under one day header; those dated-to-another-day sections are skipped so their
+// times aren't relabeled onto today. opts are forwarded to parseSchedule.
+function parseScheduleHtml(html, opts = {}) {
+  const $ = cheerio.load(html || '');
+  const dayTitle = $('.schedule__dayTitle').first().text().trim();
+  const headerDate = parseScheduleHeaderDate(dayTitle);
+  const byCategory = {};
+
+  $('.schedule__category').each((_, catEl) => {
+    const category = $(catEl).find('.card__meta').first().text().trim();
+    if (!category) return;
+    const md = extractMonthDay(category);
+    if (md && headerDate && (md.m !== headerDate.m || md.d !== headerDate.d)) return;
+
+    const list = byCategory[category] || (byCategory[category] = []);
+    $(catEl)
+      .find('.schedule__event')
+      .each((__, evEl) => {
+        const timeEl = $(evEl).find('.schedule__time').first();
+        const time = (timeEl.attr('data-time') || timeEl.text() || '').trim();
+        const event = $(evEl).find('.schedule__eventTitle').first().text().trim();
+        const channels = [];
+        $(evEl)
+          .find('.schedule__channels a[href*="watch.php?id="]')
+          .each((___, a) => {
+            const mm = /watch\.php\?id=(\d+)/.exec($(a).attr('href') || '');
+            if (mm) channels.push({ channel_id: mm[1] });
+          });
+        if (time && event && channels.length) list.push({ time, event, channels });
+      });
+  });
+
+  return parseSchedule({ [dayTitle || 'Schedule']: byCategory }, opts);
+}
+
 module.exports = {
   parseChannels,
   parseSchedule,
+  parseScheduleHtml,
+  parseScheduleHeaderDate,
   leagueAndMatchup,
   cleanLabel,
   zonedToUtcSec,
-  formatEtSuffix,
+  formatEventSuffix,
   CATEGORY_LEAGUE,
   LEAGUE_DURATION_MIN,
 };
