@@ -111,10 +111,10 @@ test('parseSchedule keeps current sport events, drops TV Shows and stale ones', 
   assert.strictEqual(e.endSec, e.startSec + 210 * 60); // MLB duration
 });
 
-test('parseSchedule anchors event times to today', () => {
+test('parseSchedule anchors event times to the day-header date', () => {
   const events = parseSchedule(SCHEDULE, { nowSec: NOW });
   const startIso = new Date(events[0].startSec * 1000).toISOString();
-  assert.match(startIso, /^2026-06-08T19:00:00/);
+  assert.match(startIso, /^2026-06-08T19:00:00/); // header is the 8th == today here
 });
 
 test('parseSchedule rejects a schedule whose header date is far stale', () => {
@@ -132,13 +132,18 @@ test('parseSchedule rejects a schedule whose header date is far stale', () => {
   );
 });
 
-test('parseSchedule keeps a schedule within the stale tolerance', () => {
+test('parseSchedule keeps a within-tolerance future day, dated to its header', () => {
   const tomorrow = {
     'Tuesday 9th June 2026 - Schedule Time UK GMT':
       SCHEDULE['Monday 8th June 2026 - Schedule Time UK GMT'],
   };
   const events = parseSchedule(tomorrow, { nowSec: NOW });
-  assert.strictEqual(events.length, 1, 'a 1-day drift is within tolerance');
+  // Stamped on the 9th (the header date), so both sport games are upcoming —
+  // the 06:00 NBA game is no longer "earlier today" once correctly dated.
+  assert.strictEqual(events.length, 2, 'a 1-day-ahead schedule keeps its future games');
+  for (const e of events) {
+    assert.match(new Date(e.startSec * 1000).toISOString(), /^2026-06-09T/, 'dated to the 9th');
+  }
 });
 
 test('parseSchedule still processes day keys with no parseable date', () => {
@@ -205,6 +210,44 @@ test('parseScheduleHtml parses the live homepage and extracts watch.php channel 
 test('parseScheduleHtml rejects a stale homepage via the freshness gate', () => {
   const stale = HOMEPAGE_HTML.replace('Monday 8th June 2026', 'Thursday 20th March 2025');
   assert.deepStrictEqual(parseScheduleHtml(stale, { nowSec: NOW }), []);
+});
+
+// dlhd leads the homepage with YESTERDAY's section, then today's. Each game must
+// be stamped on its own day header so finished ones drop out — regression for
+// "Canada vs Bosnia (yesterday) showing as scheduled today".
+const TWO_DAY_HTML = `
+<div class="schedule__dayTitle">Sunday 7th June 2026 - Schedule Time UK GMT</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">Soccer</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="19:00">19:00</span>
+        <span class="schedule__eventTitle">Yesterday Game vs Old Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=100">Feed</a></div>
+    </div>
+  </div>
+</div>
+<div class="schedule__dayTitle">Monday 8th June 2026 - Schedule Time UK GMT</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">Soccer</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="20:00">20:00</span>
+        <span class="schedule__eventTitle">Today Game vs New Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=200">Feed</a></div>
+    </div>
+  </div>
+</div>`;
+
+test('parseScheduleHtml drops a leading past-day section, keeps today', () => {
+  const events = parseScheduleHtml(TWO_DAY_HTML, { nowSec: NOW, displayTz: 'America/Chicago' });
+  assert.strictEqual(events.length, 1, "yesterday's finished game dropped; today's kept");
+  assert.match(events[0].name, /^Today Game vs New Team @ /);
+  assert.strictEqual(events[0].streamRef, '200');
 });
 
 test('parseScheduleHeaderDate extracts the date or returns null', () => {

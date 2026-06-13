@@ -184,8 +184,10 @@ function leagueAndMatchup(eventStr, categoryLabel) {
 }
 
 // Parse the schedule JSON into normalized events. Event times carry no date, so
-// they're interpreted as TODAY in the schedule's timezone and anything outside
-// the relevance window is dropped.
+// they're interpreted on their day key's header date (falling back to today only
+// when the header is unparseable), and anything outside the relevance window is
+// dropped. Stamping on the real header date is what lets a finished game listed
+// under yesterday's section drop out instead of being relabeled onto today.
 //
 // Freshness gate: a frozen mirror (dlhd has served a March-2025 schedule for
 // months) would otherwise have its year-old fixtures relabeled as live "today".
@@ -231,7 +233,13 @@ function parseSchedule(scheduleJson, opts = {}) {
       for (const ev of list) {
         const hhmm = /^(\d{1,2}):(\d{2})$/.exec(String(ev.time || '').trim());
         if (!hhmm) continue;
-        const startSec = zonedToUtcSec(today.y, today.m, today.d, +hhmm[1], +hhmm[2], scheduleTz);
+        // Stamp the event on its own day-header date. Falling back to `today`
+        // only when the header is unparseable — otherwise dlhd leading with
+        // yesterday's section (its first .schedule__dayTitle) would relabel
+        // finished games onto today. With the real date, the relevance window
+        // below drops anything already over.
+        const day = headerDate || today;
+        const startSec = zonedToUtcSec(day.y, day.m, day.d, +hhmm[1], +hhmm[2], scheduleTz);
 
         const { league, matchup } = leagueAndMatchup(ev.event, category);
         if (!matchup) continue;
@@ -301,35 +309,50 @@ function extractMonthDay(label) {
 // times aren't relabeled onto today. opts are forwarded to parseSchedule.
 function parseScheduleHtml(html, opts = {}) {
   const $ = cheerio.load(html || '');
-  const dayTitle = $('.schedule__dayTitle').first().text().trim();
-  const headerDate = parseScheduleHeaderDate(dayTitle);
-  const byCategory = {};
+  // The homepage lists multiple day sections (e.g. yesterday + today) as flat
+  // siblings: a .schedule__dayTitle followed by its .schedule__category blocks.
+  // Walk them in document order, attributing each category to the day header
+  // that precedes it, so parseSchedule can stamp each event on its true date
+  // (and drop the ones already over) instead of relabeling everything to today.
+  const schedule = {};
+  let currentDay = null;
+  let currentHeaderDate = null;
 
-  $('.schedule__category').each((_, catEl) => {
-    const category = $(catEl).find('.card__meta').first().text().trim();
+  $('.schedule__dayTitle, .schedule__category').each((_, el) => {
+    const $el = $(el);
+    if ($el.hasClass('schedule__dayTitle')) {
+      currentDay = $el.text().trim();
+      currentHeaderDate = parseScheduleHeaderDate(currentDay);
+      if (currentDay && !schedule[currentDay]) schedule[currentDay] = {};
+      return;
+    }
+
+    if (!currentDay) return; // category before any day header — ignore
+    const category = $el.find('.card__meta').first().text().trim();
     if (!category) return;
     const md = extractMonthDay(category);
-    if (md && headerDate && (md.m !== headerDate.m || md.d !== headerDate.d)) return;
+    if (md && currentHeaderDate && (md.m !== currentHeaderDate.m || md.d !== currentHeaderDate.d)) {
+      return;
+    }
 
+    const byCategory = schedule[currentDay];
     const list = byCategory[category] || (byCategory[category] = []);
-    $(catEl)
-      .find('.schedule__event')
-      .each((__, evEl) => {
-        const timeEl = $(evEl).find('.schedule__time').first();
-        const time = (timeEl.attr('data-time') || timeEl.text() || '').trim();
-        const event = $(evEl).find('.schedule__eventTitle').first().text().trim();
-        const channels = [];
-        $(evEl)
-          .find('.schedule__channels a[href*="watch.php?id="]')
-          .each((___, a) => {
-            const mm = /watch\.php\?id=(\d+)/.exec($(a).attr('href') || '');
-            if (mm) channels.push({ channel_id: mm[1] });
-          });
-        if (time && event && channels.length) list.push({ time, event, channels });
-      });
+    $el.find('.schedule__event').each((__, evEl) => {
+      const timeEl = $(evEl).find('.schedule__time').first();
+      const time = (timeEl.attr('data-time') || timeEl.text() || '').trim();
+      const event = $(evEl).find('.schedule__eventTitle').first().text().trim();
+      const channels = [];
+      $(evEl)
+        .find('.schedule__channels a[href*="watch.php?id="]')
+        .each((___, a) => {
+          const mm = /watch\.php\?id=(\d+)/.exec($(a).attr('href') || '');
+          if (mm) channels.push({ channel_id: mm[1] });
+        });
+      if (time && event && channels.length) list.push({ time, event, channels });
+    });
   });
 
-  return parseSchedule({ [dayTitle || 'Schedule']: byCategory }, opts);
+  return parseSchedule(schedule, opts);
 }
 
 module.exports = {
