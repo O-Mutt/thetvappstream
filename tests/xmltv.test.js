@@ -79,3 +79,24 @@ test('buildXmltv skips programmes with missing required fields', () => {
   const { programmeCount } = buildXmltv(channels, programmes);
   assert.strictEqual(programmeCount, 1);
 });
+
+test('buildXmltv emits <category> tags (drives Plex sports categorization)', () => {
+  const channels = [{ chid: 'evt-1', name: 'MLB: A vs B' }];
+  const programmes = {
+    'evt-1': [
+      { title: 'MLB: A vs B', startTime: 100, endTime: 200, categories: ['Sports', 'MLB'] },
+    ],
+  };
+  const { xml } = buildXmltv(channels, programmes);
+  assert.match(xml, /<category>Sports<\/category>/);
+  assert.match(xml, /<category>MLB<\/category>/);
+  // category appears inside the programme, after the title
+  assert.match(xml, /<title>MLB: A vs B<\/title>\s*<category>Sports<\/category>/);
+});
+
+test('buildXmltv omits <category> when none provided (linear channels)', () => {
+  const channels = [{ chid: 'CNN', name: 'CNN' }];
+  const programmes = { CNN: [{ title: 'News', startTime: 100, endTime: 200 }] };
+  const { xml } = buildXmltv(channels, programmes);
+  assert.doesNotMatch(xml, /<category>/);
+});

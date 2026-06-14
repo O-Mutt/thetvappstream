@@ -295,6 +295,11 @@ function buildXmltv(channelItems, programmesByChid) {
       );
       lines.push(`    <title>${encodeXML(p.title)}</title>`);
       if (p.episodeTitle) lines.push(`    <sub-title>${encodeXML(p.episodeTitle)}</sub-title>`);
+      // XMLTV <category> drives Plex Live TV categorization (Sports hub, sports
+      // artwork). Event programmes carry ["Sports", "<league>"].
+      for (const cat of p.categories || []) {
+        if (cat) lines.push(`    <category>${encodeXML(cat)}</category>`);
+      }
       lines.push('  </programme>');
       programmeCount++;
     }

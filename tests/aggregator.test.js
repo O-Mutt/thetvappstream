@@ -124,6 +124,9 @@ test('refreshEpg merges linear guides and synthesizes event programmes', async (
   assert.match(xml, /<title>News<\/title>/);
   // event folded in under its canonical id with "<league>: <name>" title
   assert.match(xml, /<title>MLB: Twins vs Red Sox @ May 22 7:10 PM<\/title>/);
+  // events are tagged Sports (+ league) so Plex categorizes them
+  assert.match(xml, /<category>Sports<\/category>/);
+  assert.match(xml, /<category>MLB<\/category>/);
 });
 
 test('linear EPG channel id matches the linear M3U tvg-id (Plex pairing)', async () => {

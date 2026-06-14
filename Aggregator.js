@@ -161,7 +161,10 @@ class Aggregator {
       for (const ev of await this._dedupeEvents()) {
         const title = `${ev.league}: ${ev.name}`;
         allItems.push({ name: title, chid: ev.id, logo: ev.logo || null });
-        allProgrammes[ev.id] = [{ title, startTime: ev.startSec, endTime: ev.endSec }];
+        // Tag as Sports (+ the league) so Plex categorizes these in its Sports
+        // hub with the right artwork/metadata.
+        const categories = [...new Set(['Sports', ev.league].filter(Boolean))];
+        allProgrammes[ev.id] = [{ title, startTime: ev.startSec, endTime: ev.endSec, categories }];
       }
 
       const { xml, programmeCount } = buildXmltv(allItems, allProgrammes);
