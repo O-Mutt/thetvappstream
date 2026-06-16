@@ -66,7 +66,7 @@ const SCHEDULE = {
     ],
     'Baseball</span>': [
       {
-        // 20:00 London (BST) == 19:00 UTC == 3:00 PM ET, ~1h ahead of NOW -> keep
+        // 20:00 GMT (UTC+0) == 20:00 UTC == 3:00 PM CDT, ~2h ahead of NOW -> keep
         time: '20:00',
         event: 'MLB : Boston Red Sox vs Minnesota Twins',
         channels: [{ channel_name: 'MLB Network', channel_id: '742' }],
@@ -75,7 +75,7 @@ const SCHEDULE = {
     ],
     'Basketball</span>': [
       {
-        // 02:00 London next day-ish; here 06:00 London == 05:00 UTC, long past NOW -> drop
+        // 06:00 GMT (UTC+0) == 06:00 UTC, long past NOW (18:00 UTC) -> drop
         time: '06:00',
         event: 'NBA : Old Game vs Stale Team',
         channels: [{ channel_id: '500' }],
@@ -104,8 +104,8 @@ test('parseSchedule keeps current sport events, drops TV Shows and stale ones', 
   const e = events[0];
   assert.strictEqual(e.league, 'MLB');
   assert.match(e.name, /^Boston Red Sox vs Minnesota Twins @ /);
-  // 20:00 London (BST) == 19:00 UTC == 2:00 PM CDT, labeled with the zone
-  assert.match(e.name, /2:00 PM CDT$/);
+  // 20:00 GMT (UTC+0) == 20:00 UTC == 3:00 PM CDT, labeled with the zone
+  assert.match(e.name, /3:00 PM CDT$/);
   assert.strictEqual(e.streamRef, '742');
   assert.deepStrictEqual(e.channelIds, ['742', '999']); // primary + backup feed
   assert.strictEqual(e.endSec, e.startSec + 210 * 60); // MLB duration
@@ -114,7 +114,7 @@ test('parseSchedule keeps current sport events, drops TV Shows and stale ones', 
 test('parseSchedule anchors event times to the day-header date', () => {
   const events = parseSchedule(SCHEDULE, { nowSec: NOW });
   const startIso = new Date(events[0].startSec * 1000).toISOString();
-  assert.match(startIso, /^2026-06-08T19:00:00/); // header is the 8th == today here
+  assert.match(startIso, /^2026-06-08T20:00:00/); // header is the 8th == today here
 });
 
 test('parseSchedule rejects a schedule whose header date is far stale', () => {
@@ -201,8 +201,8 @@ test('parseScheduleHtml parses the live homepage and extracts watch.php channel 
   assert.strictEqual(events.length, 1, 'today Soccer game kept; future-dated category skipped');
   const e = events[0];
   assert.strictEqual(e.league, 'Soccer');
-  // 19:00 London (BST) == 18:00 UTC == 1:00 PM CDT
-  assert.match(e.name, /^Canada vs Bosnia and Herzegovina @ Jun \d+ 1:00 PM CDT$/);
+  // 19:00 GMT (UTC+0) == 19:00 UTC == 2:00 PM CDT
+  assert.match(e.name, /^Canada vs Bosnia and Herzegovina @ Jun \d+ 2:00 PM CDT$/);
   assert.strictEqual(e.streamRef, '211');
   assert.deepStrictEqual(e.channelIds, ['211', '5016']);
 });

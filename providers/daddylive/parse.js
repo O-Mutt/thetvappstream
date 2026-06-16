@@ -202,7 +202,7 @@ function leagueAndMatchup(eventStr, categoryLabel) {
 function parseSchedule(scheduleJson, opts = {}) {
   const {
     nowSec = Math.floor(Date.now() / 1000),
-    scheduleTz = 'Europe/London',
+    scheduleTz = 'UTC', // dlhd schedule header reads "Schedule Time UK GMT" — not BST
     graceMin = 45,
     maxAheadHours = 36,
     maxStaleDays = 2,
