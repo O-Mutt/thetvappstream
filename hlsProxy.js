@@ -87,22 +87,9 @@ function createHlsHandlers({ lookupHeaders, baseUrlFor }) {
       upstream.data.on('end', () => {
         const base = baseUrlFor(req);
         const finalUrl = upstream.request?.res?.responseUrl || target;
-        const text = Buffer.concat(chunks).toString('utf8');
-        // DaddyLive terminates the first-half HLS stream with EXT-X-ENDLIST at
-        // halftime, then starts a new CDN URL for the second half. Forwarding
-        // ENDLIST makes ffmpeg exit cleanly, which Dispatcharr treats as "stream
-        // complete" and stops the recording. Instead, return 502 so Dispatcharr's
-        // reconnect logic fires; the next /channel/<id> fetch re-runs the resolver
-        // (fresh headless-browser solve) and gets the new second-half CDN URL.
-        // At true game end the resolver fails, all retries exhaust, and the
-        // recording stops normally.
-        if (/^#EXT-X-ENDLIST\s*$/m.test(text)) {
-          res.status(502).send('stream ended (reconnect for continuation)');
-          return;
-        }
         res
           .type('application/vnd.apple.mpegurl')
-          .send(rewriteManifest(text, finalUrl, base, streamId));
+          .send(rewriteManifest(Buffer.concat(chunks).toString('utf8'), finalUrl, base, streamId));
       });
       upstream.data.on('error', () => res.status(502).end());
       return;

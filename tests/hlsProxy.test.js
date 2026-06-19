@@ -52,7 +52,7 @@ test('isManifest detects m3u8 by extension or content-type', () => {
   assert.ok(!isManifest('https://x/seg.ts', 'video/mp2t'));
 });
 
-test('rewriteManifest preserves EXT-X-ENDLIST (handler returns 502 for it)', () => {
+test('rewriteManifest preserves EXT-X-ENDLIST tag unchanged', () => {
   const m3u8 = [
     '#EXTM3U',
     '#EXT-X-VERSION:3',
@@ -61,6 +61,5 @@ test('rewriteManifest preserves EXT-X-ENDLIST (handler returns 502 for it)', () 
     '#EXT-X-ENDLIST',
   ].join('\n');
   const out = rewriteManifest(m3u8, MANIFEST_URL, BASE, SID);
-  // ENDLIST must survive rewrite so the handler can detect and 502 it
   assert.match(out, /^#EXT-X-ENDLIST\s*$/m);
 });
