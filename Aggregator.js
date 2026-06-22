@@ -115,7 +115,7 @@ class Aggregator {
     const eventEntries = (await this._dedupeEvents()).map(ev => {
       let logo = ev.logo;
       if (base && ev.awayLogo && ev.homeLogo) {
-        logo = `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}`;
+        logo = `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}${ev.startSec ? `&t=${ev.startSec}` : ''}`;
       }
       index.set(ev.id, ev.sources);
       return {
