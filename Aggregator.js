@@ -61,7 +61,11 @@ class Aggregator {
             id: canonicalEventId(ev),
             name: ev.name,
             league: ev.league,
-            logo: ev.logo || (matchup ? matchup.away : null) || pickEventLogo({ league: ev.league, name: ev.name }) || '',
+            logo:
+              ev.logo ||
+              (matchup ? matchup.away : null) ||
+              pickEventLogo({ league: ev.league, name: ev.name }) ||
+              '',
             awayLogo: matchup ? matchup.away : null,
             homeLogo: matchup ? matchup.home : null,
             startSec: ev.startSec,

@@ -1,6 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseMatchupTeams, pickEventLogo, pickMatchupLogos, LEAGUE_LOGOS, TEAM_LOGOS } = require('../eventLogos');
+const {
+  parseMatchupTeams,
+  pickEventLogo,
+  pickMatchupLogos,
+  LEAGUE_LOGOS,
+  TEAM_LOGOS,
+} = require('../eventLogos');
 
 test('parseMatchupTeams pulls both teams and strips trailing date stamp', () => {
   assert.deepStrictEqual(

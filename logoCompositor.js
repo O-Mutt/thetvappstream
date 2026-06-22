@@ -20,14 +20,8 @@ async function buildSplitLogo(urlA, urlB) {
   const [bufA, bufB] = await Promise.all([fetchImageBuffer(urlA), fetchImageBuffer(urlB)]);
 
   const [halfA, halfB] = await Promise.all([
-    sharp(bufA)
-      .resize(HALF, SIZE, { fit: 'contain', background: TRANSPARENT })
-      .png()
-      .toBuffer(),
-    sharp(bufB)
-      .resize(HALF, SIZE, { fit: 'contain', background: TRANSPARENT })
-      .png()
-      .toBuffer(),
+    sharp(bufA).resize(HALF, SIZE, { fit: 'contain', background: TRANSPARENT }).png().toBuffer(),
+    sharp(bufB).resize(HALF, SIZE, { fit: 'contain', background: TRANSPARENT }).png().toBuffer(),
   ]);
 
   const result = await sharp({

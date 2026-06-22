@@ -259,12 +259,12 @@ const TEAM_LOGOS = {
     Switzerland: espn('soccer', '475'),
     Tunisia: espn('soccer', '659'),
     Turkey: espn('soccer', '465'),
-    'Türkiye': espn('soccer', '465'),
+    Türkiye: espn('soccer', '465'),
     'United States': espn('soccer', '660'),
     Uruguay: espn('soccer', '212'),
     USA: espn('soccer', '660'),
     Uzbekistan: espn('soccer', '2570'),
-    'Curaçao': espn('soccer', '11678'),
+    Curaçao: espn('soccer', '11678'),
   },
 };
 
