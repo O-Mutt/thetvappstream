@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseMatchupTeams, pickEventLogo, LEAGUE_LOGOS, TEAM_LOGOS } = require('../eventLogos');
+const { parseMatchupTeams, pickEventLogo, pickMatchupLogos, LEAGUE_LOGOS, TEAM_LOGOS } = require('../eventLogos');
 
 test('parseMatchupTeams pulls both teams and strips trailing date stamp', () => {
   assert.deepStrictEqual(
@@ -79,4 +79,56 @@ test('pickEventLogo returns null when called with bad input', () => {
   assert.strictEqual(pickEventLogo(), null);
   assert.strictEqual(pickEventLogo({}), null);
   assert.strictEqual(pickEventLogo({ league: 'MLB' }), LEAGUE_LOGOS.MLB);
+});
+
+test('pickMatchupLogos returns both team logo URLs when both teams are known', () => {
+  const result = pickMatchupLogos({
+    league: 'MLB',
+    name: 'Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM',
+  });
+  assert.deepStrictEqual(result, {
+    away: TEAM_LOGOS.MLB['Minnesota Twins'],
+    home: TEAM_LOGOS.MLB['Boston Red Sox'],
+  });
+});
+
+test('pickMatchupLogos returns null when either team is unknown', () => {
+  assert.strictEqual(
+    pickMatchupLogos({ league: 'MLB', name: 'Unknown Team vs Boston Red Sox @ May 22' }),
+    null,
+  );
+  assert.strictEqual(
+    pickMatchupLogos({ league: 'MLB', name: 'Minnesota Twins vs Unknown Team @ May 22' }),
+    null,
+  );
+});
+
+test('pickMatchupLogos returns null when name has no vs separator', () => {
+  assert.strictEqual(pickMatchupLogos({ league: 'MLB', name: 'Single Event' }), null);
+});
+
+test('pickMatchupLogos returns null when league has no team map', () => {
+  assert.strictEqual(pickMatchupLogos({ league: 'PPV', name: 'Fighter A vs Fighter B' }), null);
+});
+
+test('pickMatchupLogos works for NHL', () => {
+  const result = pickMatchupLogos({
+    league: 'NHL',
+    name: 'Minnesota Wild vs Tampa Bay Lightning @ Apr 10',
+  });
+  assert.deepStrictEqual(result, {
+    away: TEAM_LOGOS.NHL['Minnesota Wild'],
+    home: TEAM_LOGOS.NHL['Tampa Bay Lightning'],
+  });
+});
+
+test('pickMatchupLogos works for FIFA World Cup', () => {
+  const result = pickMatchupLogos({
+    league: 'FIFA World Cup',
+    name: 'Argentina vs France @ Jul 15 10:00 AM',
+  });
+  assert.deepStrictEqual(result, {
+    away: TEAM_LOGOS['FIFA World Cup']['Argentina'],
+    home: TEAM_LOGOS['FIFA World Cup']['France'],
+  });
 });

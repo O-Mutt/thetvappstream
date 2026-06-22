@@ -3,6 +3,7 @@ const { baseUrlFor } = require('./baseUrl');
 const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS } = require('./config');
 const { createAggregator } = require('./providers');
 const { createHlsHandlers } = require('./hlsProxy');
+const { buildSplitLogo } = require('./logoCompositor');
 
 const app = express();
 // Honor X-Forwarded-Proto / X-Forwarded-Host so req.protocol + req.get('host')
@@ -65,6 +66,20 @@ app.get('/hlsseg/:streamId', (req, res) => {
     console.error(`/hlsseg/${req.params.streamId}: ${e.message}`);
     if (!res.headersSent) res.status(502).end();
   });
+});
+
+app.get('/logo/split', async (req, res) => {
+  const { a, b } = req.query;
+  if (!a || !b) return res.status(400).type('text/plain').send('Missing a or b');
+  try {
+    const buf = await buildSplitLogo(a, b);
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(buf);
+  } catch (e) {
+    console.error(`/logo/split: ${e.message}`);
+    res.redirect(a);
+  }
 });
 
 app.get('/healthz', (_req, res) => {

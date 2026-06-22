@@ -292,6 +292,18 @@ function findLogoBySubstring(haystack, teamMap) {
   return null;
 }
 
+function pickMatchupLogos({ league, name } = {}) {
+  if (!league) return null;
+  const teamMap = TEAM_LOGOS[league];
+  if (!teamMap) return null;
+  const teams = parseMatchupTeams(name);
+  if (!teams) return null;
+  const awayLogo = findLogoBySubstring(teams[0], teamMap);
+  const homeLogo = findLogoBySubstring(teams[1], teamMap);
+  if (!awayLogo || !homeLogo) return null;
+  return { away: awayLogo, home: homeLogo };
+}
+
 function pickEventLogo({ league, name } = {}) {
   if (!league) return null;
   const teamMap = TEAM_LOGOS[league];
@@ -318,4 +330,5 @@ module.exports = {
   PREFERRED_TEAMS,
   parseMatchupTeams,
   pickEventLogo,
+  pickMatchupLogos,
 };
