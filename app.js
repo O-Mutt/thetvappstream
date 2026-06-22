@@ -69,10 +69,11 @@ app.get('/hlsseg/:streamId', (req, res) => {
 });
 
 app.get('/logo/split', async (req, res) => {
-  const { a, b } = req.query;
+  const { a, b, t } = req.query;
   if (!a || !b) return res.status(400).type('text/plain').send('Missing a or b');
   try {
-    const buf = await buildSplitLogo(a, b);
+    const startSec = t ? parseInt(t, 10) : null;
+    const buf = await buildSplitLogo(a, b, startSec);
     res.set('Content-Type', 'image/png');
     res.set('Cache-Control', 'public, max-age=86400');
     res.send(buf);
