@@ -1,6 +1,7 @@
 const { buildXmltv } = require('./ChannelManager');
 const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId } = require('./canonicalName');
+const { pickEventLogo } = require('./eventLogos');
 
 // Fans the M3U/EPG/stream surface out across N providers:
 //   - linear channels are namespaced per provider (id `${provider}:${ref}`)
@@ -59,7 +60,7 @@ class Aggregator {
             id: canonicalEventId(ev),
             name: ev.name,
             league: ev.league,
-            logo: ev.logo || '',
+            logo: ev.logo || pickEventLogo({ league: ev.league, name: ev.name }) || '',
             startSec: ev.startSec,
             endSec: ev.endSec,
             sources: [],
