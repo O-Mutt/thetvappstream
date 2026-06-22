@@ -2,6 +2,7 @@ const { buildXmltv } = require('./ChannelManager');
 const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
+const { PUBLIC_BASE_URL } = require('./config');
 
 // Fans the M3U/EPG/stream surface out across N providers:
 //   - linear channels are namespaced per provider (id `${provider}:${ref}`)
@@ -176,7 +177,16 @@ class Aggregator {
         // Tag as Sports (+ the league) so Plex categorizes these in its Sports
         // hub with the right artwork/metadata.
         const categories = [...new Set(['Sports', ev.league].filter(Boolean))];
-        allProgrammes[ev.id] = [{ title, startTime: ev.startSec, endTime: ev.endSec, categories }];
+        // Programme-level icon drives Plex poster art. Use the split composite
+        // when both team logos are available, fall back to the single logo.
+        const base = PUBLIC_BASE_URL;
+        const icon =
+          base && ev.awayLogo && ev.homeLogo
+            ? `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}${ev.startSec ? `&t=${ev.startSec}` : ''}`
+            : ev.logo || null;
+        allProgrammes[ev.id] = [
+          { title, startTime: ev.startSec, endTime: ev.endSec, categories, icon },
+        ];
       }
 
       const { xml, programmeCount } = buildXmltv(allItems, allProgrammes);
