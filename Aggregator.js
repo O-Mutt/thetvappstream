@@ -1,6 +1,7 @@
 const { buildXmltv } = require('./ChannelManager');
 const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId } = require('./canonicalName');
+const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
 
 // Fans the M3U/EPG/stream surface out across N providers:
 //   - linear channels are namespaced per provider (id `${provider}:${ref}`)
@@ -55,11 +56,18 @@ class Aggregator {
         const key = canonicalKey(ev);
         let bucket = byKey.get(key);
         if (!bucket) {
+          const matchup = pickMatchupLogos({ league: ev.league, name: ev.name });
           bucket = {
             id: canonicalEventId(ev),
             name: ev.name,
             league: ev.league,
-            logo: ev.logo || '',
+            logo:
+              ev.logo ||
+              (matchup ? matchup.away : null) ||
+              pickEventLogo({ league: ev.league, name: ev.name }) ||
+              '',
+            awayLogo: matchup ? matchup.away : null,
+            homeLogo: matchup ? matchup.home : null,
             startSec: ev.startSec,
             endSec: ev.endSec,
             sources: [],
@@ -76,7 +84,7 @@ class Aggregator {
 
   // Build merged M3U rows and (re)populate the stream index that resolveStream
   // reads. Returns { linearEntries, eventEntries } for formatting/tests.
-  async listM3uEntries() {
+  async listM3uEntries(base = '') {
     const index = new Map();
     const logos = await getChannelLogos().catch(() => ({ channels: [] }));
     const logoByName = new Map(
@@ -105,12 +113,16 @@ class Aggregator {
     }
 
     const eventEntries = (await this._dedupeEvents()).map(ev => {
+      let logo = ev.logo;
+      if (base && ev.awayLogo && ev.homeLogo) {
+        logo = `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}`;
+      }
       index.set(ev.id, ev.sources);
       return {
         tvgId: ev.id,
         name: ev.name,
         group: ev.league,
-        logo: ev.logo,
+        logo,
         streamId: ev.id,
         startSec: ev.startSec,
       };
@@ -121,7 +133,7 @@ class Aggregator {
   }
 
   async getM3u(base) {
-    const { linearEntries, eventEntries } = await this.listM3uEntries();
+    const { linearEntries, eventEntries } = await this.listM3uEntries(base);
     let chno = 0;
     let m3u = '#EXTM3U';
     for (const e of [...linearEntries, ...eventEntries]) {

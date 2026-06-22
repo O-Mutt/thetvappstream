@@ -148,3 +148,32 @@ test('an empty provider set yields a bare playlist and no epg', async () => {
   await agg.refreshEpg();
   assert.match(agg.getEpgXml(), /<tv generator-info-name="thetvappstream">/);
 });
+
+test('getM3u uses split logo URL when both teams are in the team map', async () => {
+  const p = new FakeProvider('thetvapp', {
+    events: [gameEvent('Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM', 'slot9')],
+  });
+  const agg = new Aggregator([p]);
+  const m3u = await agg.getM3u('https://proxy.example.com');
+  assert.match(m3u, /tvg-logo="https:\/\/proxy\.example\.com\/logo\/split\?a=/);
+  assert.match(m3u, /espncdn\.com.*espncdn\.com/);
+});
+
+test('getM3u falls back to single logo when only one team is known', async () => {
+  const p = new FakeProvider('thetvapp', {
+    events: [gameEvent('Minnesota Twins vs Unknown Club @ May 22 7:10 PM', 'slot9')],
+  });
+  const agg = new Aggregator([p]);
+  const m3u = await agg.getM3u('https://proxy.example.com');
+  assert.doesNotMatch(m3u, /\/logo\/split/);
+  assert.match(m3u, /tvg-logo="https:\/\/a\.espncdn\.com/);
+});
+
+test('listM3uEntries with no base does not produce split URLs', async () => {
+  const p = new FakeProvider('thetvapp', {
+    events: [gameEvent('Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM', 'slot9')],
+  });
+  const agg = new Aggregator([p]);
+  const { eventEntries } = await agg.listM3uEntries();
+  assert.doesNotMatch(eventEntries[0].logo, /\/logo\/split/);
+});
