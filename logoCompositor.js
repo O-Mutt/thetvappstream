@@ -1,14 +1,14 @@
 const sharp = require('sharp');
 const axios = require('axios');
 
-const W = 300;
+const W = 250;
 const H = 150;
-const LOGO_W = 120;
+const LOGO_W = 115;
 const LOGO_H = 110;
-const RIGHT_X = W - LOGO_W; // 180 — left edge of home logo
-const VS_X = W / 2; // 150 — center of gap between logos
-const VS_Y = LOGO_H / 2; // 55 — vertically centered in logo band
-const TIME_Y = LOGO_H + (H - LOGO_H) / 2 + 7; // ~127 — center of time band
+const RIGHT_X = W - LOGO_W; // 135
+const VS_X = LOGO_W + (W - 2 * LOGO_W) / 2; // 125 — center of gap
+const VS_Y = LOGO_H / 2; // 55
+const TIME_Y = LOGO_H + (H - LOGO_H) / 2 + 7; // ~127
 
 const MAX_CACHE = 500;
 const cache = new Map();
@@ -65,8 +65,8 @@ async function buildSplitLogo(urlA, urlB, startSec) {
   const timeStr = formatTime(startSec);
   const svgOverlay = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
-      ${textNode(VS_X, VS_Y, 20, 'vs')}
-      ${timeStr ? textNode(W / 2, TIME_Y, 21, timeStr) : ''}
+      ${textNode(VS_X, VS_Y, 16, 'vs')}
+      ${timeStr ? textNode(W / 2, TIME_Y, 24, timeStr) : ''}
     </svg>`,
   );
 
