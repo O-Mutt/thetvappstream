@@ -177,7 +177,7 @@ const NCAAB_EXTRAS = {
   Richmond: ncaa(257),
   "Saint Joseph's": ncaa(2603),
   'Saint Louis': ncaa(139),
-  "St. Bonaventure": ncaa(179),
+  'St. Bonaventure': ncaa(179),
   VCU: ncaa(2670),
   // WCC
   Gonzaga: ncaa(2250),
