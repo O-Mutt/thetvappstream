@@ -10,9 +10,16 @@ const LEAGUE_LOGOS = {
   Soccer: espnLeague('mls'),
   'FIFA World Cup': espnLeague('fifa'),
   'FIFA World Cup 2026': espnLeague('fifa'),
-  // NCAAF/NCAAB/PPV intentionally omitted: events that don't match a known
-  // team (per-league lookup below) just get no icon and the consumer falls
-  // back to whatever they already have.
+  NCAAF: espnLeague('ncaaf'),
+  NCAAB: espnLeague('ncaab'),
+  Tennis: espnLeague('atp'),
+  Golf: espnLeague('pga'),
+  Motorsport: espnLeague('f1'),
+  MMA: espnLeague('ufc'),
+  Boxing: espnLeague('boxing'),
+  Rugby: espnLeague('rugby'),
+  Cricket: espnLeague('cricket'),
+  AFL: espnLeague('afl'),
 };
 
 // Substring keys checked against the matchup string. First hit wins, and the
