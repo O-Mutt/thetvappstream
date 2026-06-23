@@ -1,5 +1,6 @@
 const espn = (league, key) => `https://a.espncdn.com/i/teamlogos/${league}/500/${key}.png`;
 const espnLeague = key => `https://a.espncdn.com/i/teamlogos/leagues/500/${key}.png`;
+const { NCAA_FOOTBALL, NCAA_BASKETBALL } = require('./ncaaLogos');
 
 const LEAGUE_LOGOS = {
   MLB: espnLeague('mlb'),
@@ -223,16 +224,8 @@ const TEAM_LOGOS = {
     'Toronto FC': espn('soccer', '7318'),
     'Vancouver Whitecaps FC': espn('soccer', '9727'),
   },
-  // NCAA uses ESPN's numeric team IDs. We only seed teams the user cares
-  // about; everything else just falls through to no-icon.
-  NCAAF: {
-    Minnesota: espn('ncaa', '135'),
-    Michigan: espn('ncaa', '130'),
-  },
-  NCAAB: {
-    Minnesota: espn('ncaa', '135'),
-    Michigan: espn('ncaa', '130'),
-  },
+  NCAAF: NCAA_FOOTBALL,
+  NCAAB: NCAA_BASKETBALL,
   // FIFA World Cup national team ESPN soccer IDs sourced from ESPN API.
   // Keys match both FIFA standard names and DaddyLive display variants.
   'FIFA World Cup': {
