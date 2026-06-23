@@ -75,9 +75,15 @@ test('pickEventLogo falls back to league logo when away team is unknown', () => 
   );
 });
 
-test('pickEventLogo returns null for leagues with no league logo (NCAA, PPV) and no team match', () => {
-  // No preferred team in matchup, no team-map hit, no league fallback for NCAA -> null
-  assert.strictEqual(pickEventLogo({ league: 'NCAAF', name: 'Iowa vs Wisconsin @ Nov 8' }), null);
+test('pickEventLogo returns NCAAF league logo when both teams are FCS (not in the FBS map)', () => {
+  // Delaware and Albany are FCS schools — not in the FBS TEAM_LOGOS map.
+  assert.strictEqual(
+    pickEventLogo({ league: 'NCAAF', name: 'Delaware vs Albany @ Oct 5' }),
+    LEAGUE_LOGOS.NCAAF,
+  );
+});
+
+test('pickEventLogo returns null for leagues with no logo (PPV) and no team match', () => {
   assert.strictEqual(pickEventLogo({ league: 'PPV', name: 'Some Fight @ May 10' }), null);
 });
 
