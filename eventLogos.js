@@ -311,7 +311,36 @@ function findLogoBySubstring(haystack, teamMap) {
   return null;
 }
 
+// The upstream source periodically decorates league group-titles with emoji and
+// suffixes ("MLB" -> "⚾ MLB", "NHL" -> "🏒 NHL", bare "Soccer" -> "NWSL Soccer
+// ⚽"). Our logo tables are keyed by the bare league, so an exact lookup blanks
+// every banner after such a rename. Resolve a raw league/group string to a
+// canonical table key by matching a known league name as a whole word/phrase in
+// the normalized string. Returns null when no known league is present -- callers
+// then fall back to no icon, exactly as before.
+const CANON_LEAGUES = [...new Set([...Object.keys(LEAGUE_LOGOS), ...Object.keys(TEAM_LOGOS)])];
+function normLeague(s) {
+  return String(s)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+function canonicalLeague(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  if (TEAM_LOGOS[raw] || LEAGUE_LOGOS[raw]) return raw; // already canonical
+  const hay = ` ${normLeague(raw)} `;
+  // Longest canonical names first so "FIFA World Cup 2026" wins over "FIFA World
+  // Cup", and multi-word keys beat single tokens.
+  const keys = CANON_LEAGUES.slice().sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    const needle = normLeague(key);
+    if (needle && hay.includes(` ${needle} `)) return key;
+  }
+  return null;
+}
+
 function pickMatchupLogos({ league, name } = {}) {
+  league = canonicalLeague(league);
   if (!league) return null;
   const teamMap = TEAM_LOGOS[league];
   if (!teamMap) return null;
@@ -324,6 +353,7 @@ function pickMatchupLogos({ league, name } = {}) {
 }
 
 function pickEventLogo({ league, name } = {}) {
+  league = canonicalLeague(league);
   if (!league) return null;
   const teamMap = TEAM_LOGOS[league];
   const preferred = PREFERRED_TEAMS[league];
@@ -348,6 +378,7 @@ module.exports = {
   TEAM_LOGOS,
   PREFERRED_TEAMS,
   parseMatchupTeams,
+  canonicalLeague,
   pickEventLogo,
   pickMatchupLogos,
 };
