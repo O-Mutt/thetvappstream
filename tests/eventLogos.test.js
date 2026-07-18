@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   parseMatchupTeams,
+  canonicalLeague,
   pickEventLogo,
   pickMatchupLogos,
   LEAGUE_LOGOS,
@@ -142,5 +143,56 @@ test('pickMatchupLogos works for FIFA World Cup', () => {
   assert.deepStrictEqual(result, {
     away: TEAM_LOGOS['FIFA World Cup']['Argentina'],
     home: TEAM_LOGOS['FIFA World Cup']['France'],
+  });
+});
+
+// Regression: the upstream source renamed league group-titles to add emoji
+// (e.g. "MLB" -> "⚾ MLB"), which blanked every banner because the logo tables
+// are keyed by the bare league. canonicalLeague normalizes the decorated group
+// back to the table key.
+test('canonicalLeague normalizes emoji-decorated league group-titles', () => {
+  assert.strictEqual(canonicalLeague('⚾ MLB'), 'MLB');
+  assert.strictEqual(canonicalLeague('🏒 NHL'), 'NHL');
+  assert.strictEqual(canonicalLeague('🏈 NFL'), 'NFL');
+  assert.strictEqual(canonicalLeague('🏀 NBA'), 'NBA');
+  assert.strictEqual(canonicalLeague('🏀 WNBA'), 'WNBA');
+  assert.strictEqual(canonicalLeague('NWSL Soccer ⚽'), 'Soccer');
+  assert.strictEqual(canonicalLeague('⚾ MLB Home Run Derby'), 'MLB');
+});
+
+test('canonicalLeague passes through already-canonical keys and prefers the most specific', () => {
+  assert.strictEqual(canonicalLeague('MLB'), 'MLB');
+  assert.strictEqual(canonicalLeague('Soccer'), 'Soccer');
+  // "FIFA World Cup 2026" must win over the shorter "FIFA World Cup".
+  assert.strictEqual(canonicalLeague('⚽ FIFA World Cup 2026 🏆'), 'FIFA World Cup 2026');
+  assert.strictEqual(canonicalLeague('🏆 FIFA World Cup'), 'FIFA World Cup');
+});
+
+test('canonicalLeague returns null for unknown leagues (fall back to no icon)', () => {
+  assert.strictEqual(canonicalLeague('🤾 Handball'), null);
+  assert.strictEqual(canonicalLeague(''), null);
+  assert.strictEqual(canonicalLeague(null), null);
+  // WNBA token must not be matched by the NBA key.
+  assert.notStrictEqual(canonicalLeague('🏀 WNBA'), 'NBA');
+});
+
+test('pickEventLogo restores the Twins banner from an emoji-decorated MLB group', () => {
+  assert.strictEqual(
+    pickEventLogo({
+      league: '⚾ MLB',
+      name: '🇺🇸 Minnesota Twins vs 🇺🇸 Chicago Cubs @ Jul 18 1:20 PM CDT',
+    }),
+    TEAM_LOGOS.MLB['Minnesota Twins'],
+  );
+});
+
+test('pickMatchupLogos resolves both teams from an emoji-decorated group', () => {
+  const result = pickMatchupLogos({
+    league: '⚾ MLB',
+    name: 'Minnesota Twins vs Boston Red Sox @ Jul 18',
+  });
+  assert.deepStrictEqual(result, {
+    away: TEAM_LOGOS.MLB['Minnesota Twins'],
+    home: TEAM_LOGOS.MLB['Boston Red Sox'],
   });
 });
