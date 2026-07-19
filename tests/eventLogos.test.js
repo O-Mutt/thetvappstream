@@ -196,3 +196,28 @@ test('pickMatchupLogos resolves both teams from an emoji-decorated group', () =>
     home: TEAM_LOGOS.MLB['Boston Red Sox'],
   });
 });
+
+// Coverage adds for the user's custom setup: WNBA logos already existed
+// (Lynx), this brings NWSL (league mark) and PWHL (Minnesota Frost crest).
+test('canonicalLeague recognizes newly-added NWSL and PWHL', () => {
+  assert.strictEqual(canonicalLeague('⚽ NWSL'), 'NWSL');
+  assert.strictEqual(canonicalLeague('🏒 PWHL'), 'PWHL');
+});
+
+test('pickEventLogo gives the Frost crest for a PWHL matchup', () => {
+  assert.strictEqual(
+    pickEventLogo({ league: '🏒 PWHL', name: 'Minnesota Frost vs Toronto Sceptres @ Jan 1' }),
+    TEAM_LOGOS.PWHL['Minnesota Frost'],
+  );
+});
+
+test('pickEventLogo falls back to the league mark for NWSL / non-seeded PWHL', () => {
+  assert.strictEqual(
+    pickEventLogo({ league: '⚽ NWSL', name: 'Orlando Pride vs Boston Legacy FC @ Jul 18' }),
+    LEAGUE_LOGOS.NWSL,
+  );
+  assert.strictEqual(
+    pickEventLogo({ league: '🏒 PWHL', name: 'Boston Fleet vs Ottawa Charge @ Jan 2' }),
+    LEAGUE_LOGOS.PWHL,
+  );
+});
