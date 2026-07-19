@@ -8,7 +8,10 @@ const LEAGUE_LOGOS = {
   NFL: espnLeague('nfl'),
   NBA: espnLeague('nba'),
   WNBA: espnLeague('wnba'),
+  // PWHL isn't on ESPN's CDN; use the Wikipedia league mark.
+  PWHL: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Logo_of_the_Professional_Women%E2%80%99s_Hockey_League.svg/250px-Logo_of_the_Professional_Women%E2%80%99s_Hockey_League.svg.png',
   Soccer: espnLeague('mls'),
+  NWSL: espnLeague('nwsl'),
   'FIFA World Cup': espnLeague('fifa'),
   'FIFA World Cup 2026': espnLeague('fifa'),
   NCAAF: espnLeague('ncaaf'),
@@ -32,6 +35,7 @@ const PREFERRED_TEAMS = {
   NFL: ['Minnesota Vikings'],
   NBA: ['Minnesota Timberwolves'],
   WNBA: ['Minnesota Lynx'],
+  PWHL: ['Minnesota Frost'],
   NCAAF: ['Minnesota', 'Michigan'],
   NCAAB: ['Minnesota', 'Michigan'],
   Soccer: ['Minnesota United'],
@@ -284,6 +288,12 @@ const TEAM_LOGOS = {
     USA: espn('soccer', '660'),
     Uzbekistan: espn('soccer', '2570'),
     Curaçao: espn('soccer', '11678'),
+  },
+  // PWHL isn't on ESPN; only the user's team is seeded, others fall back to the
+  // league mark. NWSL has no Minnesota team, so it stays league-mark only.
+  PWHL: {
+    'Minnesota Frost':
+      'https://upload.wikimedia.org/wikipedia/en/thumb/a/ae/MinnesotaFrost.png/250px-MinnesotaFrost.png',
   },
 };
 
