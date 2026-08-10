@@ -362,6 +362,20 @@ function pickMatchupLogos({ league, name } = {}) {
   return { away: awayLogo, home: homeLogo };
 }
 
+// Crest for one side of a matchup, or null when the league/team isn't mapped.
+// Lets the artwork renderer draw a crest for the side it knows and fall back to
+// text for the other, instead of pickMatchupLogos' all-or-nothing pair.
+function pickTeamLogo({ league, team } = {}) {
+  const key = canonicalLeague(league);
+  if (!key) return null;
+  return findLogoBySubstring(team, TEAM_LOGOS[key]);
+}
+
+function pickLeagueLogo(league) {
+  const key = canonicalLeague(league);
+  return (key && LEAGUE_LOGOS[key]) || null;
+}
+
 function pickEventLogo({ league, name } = {}) {
   league = canonicalLeague(league);
   if (!league) return null;
@@ -391,4 +405,6 @@ module.exports = {
   canonicalLeague,
   pickEventLogo,
   pickMatchupLogos,
+  pickTeamLogo,
+  pickLeagueLogo,
 };

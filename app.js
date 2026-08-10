@@ -3,7 +3,7 @@ const { baseUrlFor } = require('./baseUrl');
 const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS } = require('./config');
 const { createAggregator } = require('./providers');
 const { createHlsHandlers } = require('./hlsProxy');
-const { buildSplitLogo } = require('./logoCompositor');
+const { buildSplitLogo, renderEventArt } = require('./logoCompositor');
 
 const app = express();
 // Honor X-Forwarded-Proto / X-Forwarded-Host so req.protocol + req.get('host')
@@ -66,6 +66,31 @@ app.get('/hlsseg/:streamId', (req, res) => {
     console.error(`/hlsseg/${req.params.streamId}: ${e.message}`);
     if (!res.headersSent) res.status(502).end();
   });
+});
+
+// Event artwork. fmt=poster feeds the programme <icon> (Plex's 2:3 program
+// frame), fmt=thumb the channel <icon>/tvg-logo. Crests are resolved from
+// league+name server-side, so unmapped leagues still render legible text art.
+app.get('/logo/event', async (req, res) => {
+  const league = req.query.league == null ? '' : String(req.query.league);
+  const name = req.query.name == null ? '' : String(req.query.name);
+  const fmt = req.query.fmt == null ? undefined : String(req.query.fmt);
+  if (!league && !name) return res.status(400).type('text/plain').send('Missing league or name');
+  try {
+    const startSec = req.query.t ? parseInt(String(req.query.t), 10) : null;
+    const buf = await renderEventArt({
+      league,
+      name,
+      startSec: Number.isFinite(startSec) ? startSec : null,
+      fmt,
+    });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.send(buf);
+  } catch (e) {
+    console.error(`/logo/event: ${e.message}`);
+    res.status(500).type('text/plain').send('Could not render artwork');
+  }
 });
 
 app.get('/logo/split', async (req, res) => {
