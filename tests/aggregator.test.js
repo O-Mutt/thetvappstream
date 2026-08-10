@@ -122,8 +122,10 @@ test('refreshEpg merges linear guides and synthesizes event programmes', async (
   // linear guide id is namespaced to match the M3U tvg-id
   assert.match(xml, /<channel id="thetvapp:101"><display-name>CNN<\/display-name>/);
   assert.match(xml, /<title>News<\/title>/);
-  // event folded in under its canonical id with "<league>: <name>" title
-  assert.match(xml, /<title>MLB: Twins vs Red Sox @ May 22 7:10 PM<\/title>/);
+  // event folded in under its canonical id with "<league>: <matchup>" title.
+  // The "@ <time>" suffix is dropped here (Plex renders the slot itself) but
+  // stays on the channel name for the recording scheduler.
+  assert.match(xml, /<title>MLB: Twins vs Red Sox<\/title>/);
   // events are tagged Sports (+ league) so Plex categorizes them
   assert.match(xml, /<category>Sports<\/category>/);
   assert.match(xml, /<category>MLB<\/category>/);
@@ -149,31 +151,99 @@ test('an empty provider set yields a bare playlist and no epg', async () => {
   assert.match(agg.getEpgXml(), /<tv generator-info-name="thetvappstream">/);
 });
 
-test('getM3u uses split logo URL when both teams are in the team map', async () => {
+test('getM3u points event logos at the rendered thumb endpoint', async () => {
   const p = new FakeProvider('thetvapp', {
     events: [gameEvent('Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM', 'slot9')],
   });
   const agg = new Aggregator([p]);
   const m3u = await agg.getM3u('https://proxy.example.com');
-  assert.match(m3u, /tvg-logo="https:\/\/proxy\.example\.com\/logo\/split\?a=/);
-  assert.match(m3u, /espncdn\.com.*espncdn\.com/);
+  assert.match(m3u, /tvg-logo="https:\/\/proxy\.example\.com\/logo\/event\?fmt=thumb&league=MLB&/);
+  assert.match(m3u, /name=Minnesota%20Twins%20vs%20Boston%20Red%20Sox/);
 });
 
-test('getM3u falls back to single logo when only one team is known', async () => {
+test('events with no mapped crests still get artwork', async () => {
   const p = new FakeProvider('thetvapp', {
-    events: [gameEvent('Minnesota Twins vs Unknown Club @ May 22 7:10 PM', 'slot9')],
+    events: [
+      {
+        league: 'Ukrainian Premier League',
+        name: 'Karpaty vs LNZ Cherkasy @ Aug 10 10:00 AM CDT',
+        startSec: START,
+        endSec: END,
+        streamRef: 'slot9',
+      },
+    ],
   });
   const agg = new Aggregator([p]);
   const m3u = await agg.getM3u('https://proxy.example.com');
-  assert.doesNotMatch(m3u, /\/logo\/split/);
-  assert.match(m3u, /tvg-logo="https:\/\/a\.espncdn\.com/);
+  assert.match(m3u, /tvg-logo="https:\/\/proxy\.example\.com\/logo\/event\?fmt=thumb/);
+  assert.doesNotMatch(m3u, /tvg-logo=""/);
 });
 
-test('listM3uEntries with no base does not produce split URLs', async () => {
+test('listM3uEntries with no base falls back to a direct crest URL', async () => {
   const p = new FakeProvider('thetvapp', {
     events: [gameEvent('Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM', 'slot9')],
   });
   const agg = new Aggregator([p]);
   const { eventEntries } = await agg.listM3uEntries();
-  assert.doesNotMatch(eventEntries[0].logo, /\/logo\/split/);
+  assert.doesNotMatch(eventEntries[0].logo, /\/logo\//);
+  assert.match(eventEntries[0].logo, /^https:\/\/a\.espncdn\.com/);
+});
+
+test('emoji-decorated leagues collapse onto one group and one dedup bucket', async () => {
+  const p = new FakeProvider('thetvapp', {
+    events: [
+      {
+        league: '⚾ 🇨🇦 MLB',
+        name: 'Toronto Blue Jays 🇨🇦 vs Boston Red Sox 🇺🇸 @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'a',
+      },
+      {
+        league: '⚾ 🇺🇸 MLB',
+        name: 'Atlanta Braves 🇺🇸 vs New York Mets 🇺🇸 @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'b',
+      },
+    ],
+  });
+  const agg = new Aggregator([p]);
+  const { eventEntries } = await agg.listM3uEntries('https://proxy.example.com');
+
+  assert.strictEqual(eventEntries.length, 2);
+  assert.deepStrictEqual([...new Set(eventEntries.map(e => e.group))], ['MLB']);
+  assert.deepStrictEqual(eventEntries.map(e => e.name).sort(), [
+    'Atlanta Braves vs New York Mets @ May 22 7:10 PM',
+    'Toronto Blue Jays vs Boston Red Sox @ May 22 7:10 PM',
+  ]);
+  for (const e of eventEntries) assert.doesNotMatch(e.tvgId, /[^a-z0-9-]/);
+});
+
+test('the same game reported with different flags dedupes to one entry', async () => {
+  const a = new FakeProvider('thetvapp', {
+    events: [
+      {
+        league: '⚾ 🇨🇦 MLB',
+        name: 'Toronto Blue Jays 🇨🇦 vs Boston Red Sox 🇺🇸 @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'tva',
+      },
+    ],
+  });
+  const b = new FakeProvider('streameast', {
+    events: [
+      {
+        league: '⚾ 🇺🇸 MLB',
+        name: 'Boston Red Sox vs Toronto Blue Jays @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'sea',
+      },
+    ],
+  });
+  const agg = new Aggregator([a, b]);
+  const { eventEntries } = await agg.listM3uEntries();
+  assert.strictEqual(eventEntries.length, 1);
 });

@@ -1,8 +1,22 @@
 const { buildXmltv } = require('./ChannelManager');
 const { getChannelLogos } = require('./utils');
-const { canonicalKey, canonicalEventId } = require('./canonicalName');
+const { canonicalKey, canonicalEventId, stripTime } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
+const { normalizeLeagueLabel, normalizeEventName } = require('./displayName');
 const { PUBLIC_BASE_URL } = require('./config');
+
+// Rendered artwork lives behind /logo/event and is addressed by the same
+// display strings that appear in the guide, so one URL covers crest-backed and
+// text-only events alike.
+function eventArtUrl(base, ev, fmt) {
+  const q = [
+    `fmt=${fmt}`,
+    `league=${encodeURIComponent(ev.league || '')}`,
+    `name=${encodeURIComponent(ev.name || '')}`,
+  ];
+  if (ev.startSec) q.push(`t=${ev.startSec}`);
+  return `${base}/logo/event?${q.join('&')}`;
+}
 
 // Fans the M3U/EPG/stream surface out across N providers:
 //   - linear channels are namespaced per provider (id `${provider}:${ref}`)
@@ -54,19 +68,23 @@ class Aggregator {
       }
       for (const ev of events) {
         if (!ev || !ev.streamRef) continue;
-        const key = canonicalKey(ev);
+        // Strip the source's own emoji/flag decoration before anything derives
+        // from these strings. The league is part of the canonical key, so
+        // leaving it raw splits one game's league ("⚾ 🇨🇦 MLB" vs "⚾ 🇺🇸 MLB")
+        // into separate dedup buckets and separate Dispatcharr channel groups.
+        const league = normalizeLeagueLabel(ev.league);
+        const name = normalizeEventName(ev.name);
+        const normalized = { ...ev, league, name };
+        const key = canonicalKey(normalized);
         let bucket = byKey.get(key);
         if (!bucket) {
-          const matchup = pickMatchupLogos({ league: ev.league, name: ev.name });
+          const matchup = pickMatchupLogos({ league, name });
           bucket = {
-            id: canonicalEventId(ev),
-            name: ev.name,
-            league: ev.league,
+            id: canonicalEventId(normalized),
+            name,
+            league,
             logo:
-              ev.logo ||
-              (matchup ? matchup.away : null) ||
-              pickEventLogo({ league: ev.league, name: ev.name }) ||
-              '',
+              ev.logo || (matchup ? matchup.away : null) || pickEventLogo({ league, name }) || '',
             awayLogo: matchup ? matchup.away : null,
             homeLogo: matchup ? matchup.home : null,
             startSec: ev.startSec,
@@ -114,10 +132,10 @@ class Aggregator {
     }
 
     const eventEntries = (await this._dedupeEvents()).map(ev => {
-      let logo = ev.logo;
-      if (base && ev.awayLogo && ev.homeLogo) {
-        logo = `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}${ev.startSec ? `&t=${ev.startSec}` : ''}`;
-      }
+      // Every event gets rendered art when we know our public base URL — the
+      // renderer falls back to text for leagues with no crest table, so no
+      // event ships a blank tvg-logo.
+      const logo = base ? eventArtUrl(base, ev, 'thumb') : ev.logo;
       index.set(ev.id, ev.sources);
       return {
         tvgId: ev.id,
@@ -172,18 +190,22 @@ class Aggregator {
       // Synthesize one programme per deduped event, keyed to the same id the
       // M3U emits so Plex pairs the row with its guide entry.
       for (const ev of await this._dedupeEvents()) {
-        const title = `${ev.league}: ${ev.name}`;
-        allItems.push({ name: title, chid: ev.id, logo: ev.logo || null });
+        // The channel name keeps the "@ <time>" suffix (Dispatcharr's recording
+        // scheduler parses it out of Channel.name); the programme title drops it
+        // because Plex already renders the time slot.
+        const title = `${ev.league}: ${stripTime(ev.name)}`;
+        const base = PUBLIC_BASE_URL;
+        allItems.push({
+          name: title,
+          chid: ev.id,
+          logo: (base ? eventArtUrl(base, ev, 'thumb') : ev.logo) || null,
+        });
         // Tag as Sports (+ the league) so Plex categorizes these in its Sports
         // hub with the right artwork/metadata.
         const categories = [...new Set(['Sports', ev.league].filter(Boolean))];
-        // Programme-level icon drives Plex poster art. Use the split composite
-        // when both team logos are available, fall back to the single logo.
-        const base = PUBLIC_BASE_URL;
-        const icon =
-          base && ev.awayLogo && ev.homeLogo
-            ? `${base}/logo/split?a=${encodeURIComponent(ev.awayLogo)}&b=${encodeURIComponent(ev.homeLogo)}${ev.startSec ? `&t=${ev.startSec}` : ''}`
-            : ev.logo || null;
+        // Programme-level icon drives Plex poster art, which it renders in a 2:3
+        // frame — hence the portrait format here and the landscape one above.
+        const icon = base ? eventArtUrl(base, ev, 'poster') : ev.logo || null;
         allProgrammes[ev.id] = [
           { title, startTime: ev.startSec, endTime: ev.endSec, categories, icon },
         ];
