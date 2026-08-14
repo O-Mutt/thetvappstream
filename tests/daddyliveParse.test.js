@@ -274,3 +274,179 @@ test('parseSchedule drops events whose only channel list is empty', () => {
   };
   assert.deepStrictEqual(parseSchedule(sched, { nowSec: NOW }), []);
 });
+
+// ---------------------------------------------------------------------------
+// Midnight day-rollover
+//
+// dlhd runs a category past midnight without opening a new day section. Modelled
+// on the real 2026-08-13 Baseball block, where 22:40/23:40 were that evening and
+// 00:37/01:35 were the small hours of the 14th. Stamping the latter on the header
+// date put them ~24h in the past, where the relevance window ate them — 5 of 9
+// MLB games vanished from the guide.
+const WRAP_SCHEDULE = {
+  'Monday 8th June 2026 - Schedule Time UK GMT': {
+    'Baseball</span>': [
+      { time: '22:40', event: 'MLB : Tigers vs Guardians', channels: [{ channel_id: '1' }] },
+      { time: '23:40', event: 'MLB : White Sox vs Reds', channels: [{ channel_id: '2' }] },
+      { time: '00:37', event: 'MLB : Blue Jays vs Red Sox', channels: [{ channel_id: '3' }] },
+      { time: '01:35', event: 'MLB : Nationals vs Cubs', channels: [{ channel_id: '4' }] },
+    ],
+  },
+};
+
+function startIso(ev) {
+  return new Date(ev.startSec * 1000).toISOString();
+}
+function byName(events, needle) {
+  return events.find(e => e.name.includes(needle));
+}
+
+test('parseSchedule rolls post-midnight events onto the next day', () => {
+  const events = parseSchedule(WRAP_SCHEDULE, { nowSec: NOW });
+  assert.strictEqual(events.length, 4, 'all four survive; none dropped as stale');
+  assert.match(startIso(byName(events, 'Tigers')), /^2026-06-08T22:40:00/);
+  assert.match(startIso(byName(events, 'White Sox')), /^2026-06-08T23:40:00/);
+  // the wrap: these are the 9th, not the 8th
+  assert.match(startIso(byName(events, 'Blue Jays')), /^2026-06-09T00:37:00/);
+  assert.match(startIso(byName(events, 'Nationals')), /^2026-06-09T01:35:00/);
+});
+
+test('the rollover is what keeps post-midnight games in the guide at all', () => {
+  // Without it these land a day earlier, i.e. already finished, and the
+  // relevance window drops them. This is the regression that hid the games.
+  const events = parseSchedule(WRAP_SCHEDULE, { nowSec: NOW });
+  assert.ok(byName(events, 'Blue Jays'), 'post-midnight game survives the relevance window');
+  assert.ok(events.every(e => e.endSec >= NOW - 45 * 60));
+});
+
+test('the day only rolls once, even when a category steps backwards twice', () => {
+  // dlhd's "Tennis" is not one chronological stream: it lists tournament
+  // umbrellas, then per-match rows, stepping backwards more than once. Rolling
+  // on every decrease would fling later events days into the future.
+  const messy = {
+    'Monday 8th June 2026 - Schedule Time UK GMT': {
+      'Tennis</span>': [
+        { time: '20:30', event: 'Tennis : Umbrella A', channels: [{ channel_id: '1' }] },
+        { time: '04:30', event: 'Tennis : Umbrella B', channels: [{ channel_id: '2' }] },
+        { time: '20:30', event: 'Tennis : Match One', channels: [{ channel_id: '3' }] },
+        { time: '01:00', event: 'Tennis : Match Two', channels: [{ channel_id: '4' }] },
+      ],
+    },
+  };
+  const events = parseSchedule(messy, { nowSec: NOW });
+  const days = events.map(e => startIso(e).slice(0, 10));
+  assert.ok(
+    days.every(d => d === '2026-06-08' || d === '2026-06-09'),
+    `never rolls past +1 day, got ${JSON.stringify(days)}`,
+  );
+});
+
+test('an ascending category is never rolled', () => {
+  const ascending = {
+    'Monday 8th June 2026 - Schedule Time UK GMT': {
+      'Soccer</span>': [
+        { time: '19:00', event: 'Soccer : A vs B', channels: [{ channel_id: '1' }] },
+        { time: '20:00', event: 'Soccer : C vs D', channels: [{ channel_id: '2' }] },
+        { time: '21:00', event: 'Soccer : E vs F', channels: [{ channel_id: '3' }] },
+      ],
+    },
+  };
+  const events = parseSchedule(ascending, { nowSec: NOW });
+  assert.ok(events.every(e => startIso(e).startsWith('2026-06-08')));
+});
+
+test('repeated identical times (24/7 feeds) do not trigger a roll', () => {
+  // dlhd's Big Brother cams are all listed at 00:00; equal is not a step back.
+  const feeds = {
+    'Monday 8th June 2026 - Schedule Time UK GMT': {
+      'Big Brother</span>': [
+        { time: '00:00', event: 'Feeds : Cam 1', channels: [{ channel_id: '1' }] },
+        { time: '00:00', event: 'Feeds : Cam 2', channels: [{ channel_id: '2' }] },
+        { time: '00:00', event: 'Feeds : Cam 3', channels: [{ channel_id: '3' }] },
+      ],
+    },
+  };
+  const events = parseSchedule(feeds, { nowSec: NOW });
+  assert.ok(
+    events.every(e => startIso(e).startsWith('2026-06-08')),
+    'all stay on the header date',
+  );
+});
+
+test('the roll state is per-category, not shared across the day', () => {
+  const twoCats = {
+    'Monday 8th June 2026 - Schedule Time UK GMT': {
+      'Baseball</span>': [
+        { time: '22:40', event: 'MLB : Late Game', channels: [{ channel_id: '1' }] },
+        { time: '00:37', event: 'MLB : Wrapped Game', channels: [{ channel_id: '2' }] },
+      ],
+      'Soccer</span>': [
+        { time: '20:00', event: 'Soccer : Plain Game', channels: [{ channel_id: '3' }] },
+      ],
+    },
+  };
+  const events = parseSchedule(twoCats, { nowSec: NOW });
+  assert.match(startIso(byName(events, 'Wrapped Game')), /^2026-06-09/);
+  assert.match(
+    startIso(byName(events, 'Plain Game')),
+    /^2026-06-08/,
+    'a fresh category starts unrolled',
+  );
+});
+
+test('rolling over a month boundary produces a valid date', () => {
+  const monthEnd = {
+    'Sunday 30th June 2026 - Schedule Time UK GMT': {
+      'Baseball</span>': [
+        { time: '23:40', event: 'MLB : Last Of June', channels: [{ channel_id: '1' }] },
+        { time: '00:30', event: 'MLB : First Of July', channels: [{ channel_id: '2' }] },
+      ],
+    },
+  };
+  const june30 = Date.parse('2026-06-30T18:00:00Z') / 1000;
+  const events = parseSchedule(monthEnd, { nowSec: june30 });
+  assert.match(startIso(byName(events, 'Last Of June')), /^2026-06-30T23:40:00/);
+  assert.match(startIso(byName(events, 'First Of July')), /^2026-07-01T00:30:00/);
+});
+
+test('schedule times are read as UTC, not Europe/London', () => {
+  // dlhd's header says "Schedule Time UK GMT" and means it literally, even in
+  // BST. Read as London time a June 22:40 would be an hour early (21:40 UTC),
+  // which would have made a real 5:40 PM CDT first pitch show as 4:40 PM.
+  const events = parseSchedule(WRAP_SCHEDULE, { nowSec: NOW, displayTz: 'America/Chicago' });
+  const tigers = byName(events, 'Tigers');
+  assert.match(startIso(tigers), /^2026-06-08T22:40:00/, 'no BST shift applied');
+  assert.match(tigers.name, /5:40 PM CDT$/);
+});
+
+// The production path is the HTML scrape, so exercise the rollover through it
+// too — cheerio must hand parseSchedule the events in DOM order for the wrap
+// detection to mean anything.
+const WRAP_HTML = `
+<div class="schedule__dayTitle">Monday 8th June 2026 - Schedule Time UK GMT</div>
+<div class="schedule__category">
+  <div class="schedule__catHeader"><div class="card__meta">Baseball (MLB)</div></div>
+  <div class="schedule__categoryBody">
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="23:40">23:40</span>
+        <span class="schedule__eventTitle">MLB : Evening Game vs Home Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=10">Feed</a></div>
+    </div>
+    <div class="schedule__event">
+      <div class="schedule__eventHeader">
+        <span class="schedule__time" data-time="00:37">00:37</span>
+        <span class="schedule__eventTitle">MLB : Wrapped Game vs Late Team</span>
+      </div>
+      <div class="schedule__channels"><a href="/watch.php?id=11">Feed</a></div>
+    </div>
+  </div>
+</div>`;
+
+test('parseScheduleHtml rolls a post-midnight event onto the next day', () => {
+  const events = parseScheduleHtml(WRAP_HTML, { nowSec: NOW, displayTz: 'America/Chicago' });
+  assert.strictEqual(events.length, 2, 'both kept — the wrapped one is no longer dropped as stale');
+  assert.match(startIso(byName(events, 'Evening Game')), /^2026-06-08T23:40:00/);
+  assert.match(startIso(byName(events, 'Wrapped Game')), /^2026-06-09T00:37:00/);
+});
