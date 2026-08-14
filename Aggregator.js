@@ -2,7 +2,7 @@ const { buildXmltv } = require('./ChannelManager');
 const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId, stripTime } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
-const { normalizeLeagueLabel, normalizeEventName } = require('./displayName');
+const { normalizeLeagueLabel, normalizeEventName, stripLeaguePrefix } = require('./displayName');
 const { PUBLIC_BASE_URL } = require('./config');
 
 // Rendered artwork lives behind /logo/event and is addressed by the same
@@ -73,7 +73,9 @@ class Aggregator {
         // leaving it raw splits one game's league ("⚾ 🇨🇦 MLB" vs "⚾ 🇺🇸 MLB")
         // into separate dedup buckets and separate Dispatcharr channel groups.
         const league = normalizeLeagueLabel(ev.league);
-        const name = normalizeEventName(ev.name);
+        // The source now bakes the league into the matchup too; without this the
+        // guide title prepends it a second time ("MLB: MLB: Tigers vs ...").
+        const name = stripLeaguePrefix(normalizeEventName(ev.name), league);
         const normalized = { ...ev, league, name };
         const key = canonicalKey(normalized);
         let bucket = byKey.get(key);

@@ -247,3 +247,42 @@ test('the same game reported with different flags dedupes to one entry', async (
   const { eventEntries } = await agg.listM3uEntries();
   assert.strictEqual(eventEntries.length, 1);
 });
+
+test('a league the source baked into the name is not repeated in the title', () => {
+  // Regression: Plex showed "MLB: MLB: Detroit Tigers vs Cleveland Guardians".
+  const p = new FakeProvider('daddylive', {
+    events: [
+      {
+        league: '⚾ 🇺🇸 MLB',
+        name: '⚾ 🇺🇸 MLB: Detroit Tigers vs Cleveland Guardians @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'a',
+      },
+    ],
+  });
+  const agg = new Aggregator([p]);
+  return agg.refreshEpg().then(() => {
+    const xml = agg.getEpgXml();
+    assert.match(xml, /<title>MLB: Detroit Tigers vs Cleveland Guardians<\/title>/);
+    assert.doesNotMatch(xml, /MLB: MLB:/);
+  });
+});
+
+test('the M3U channel name also loses the duplicated league', async () => {
+  const p = new FakeProvider('daddylive', {
+    events: [
+      {
+        league: 'Europe - UEFA Europa League',
+        name: 'Europe - UEFA Europa League: Pafos vs Salzburg @ May 22 7:10 PM',
+        startSec: START,
+        endSec: END,
+        streamRef: 'a',
+      },
+    ],
+  });
+  const agg = new Aggregator([p]);
+  const { eventEntries } = await agg.listM3uEntries();
+  assert.strictEqual(eventEntries[0].name, 'Pafos vs Salzburg @ May 22 7:10 PM');
+  assert.strictEqual(eventEntries[0].group, 'Europe - UEFA Europa League');
+});
