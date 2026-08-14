@@ -44,4 +44,76 @@ function normalizeEventName(raw) {
   return stripped || String(raw ?? '').trim();
 }
 
-module.exports = { stripEmoji, normalizeLeagueLabel, normalizeEventName };
+// Match a colon that separates a league from its matchup, i.e. NOT one inside a
+// clock time. "MLB: Tigers vs Guardians" splits; "5:40 PM" does not.
+const LEAGUE_SEP_RE = /:(?!\d)/;
+
+// Drop a league prefix the source already baked into the event name.
+//
+// dlhd used to emit "LEAGUE : matchup", which the daddylive parser split apart.
+// It now emits "LEAGUE: matchup" (no space before the colon), so the split stops
+// firing and the league survives inside the matchup — then the guide title
+// prepends it again and Plex shows "MLB: MLB: Detroit Tigers vs Cleveland
+// Guardians". Soccer doubles the same way via "Europe - UEFA Europa League:".
+//
+// Deliberately narrow: only strips when the prefix IS the league. dlhd event
+// strings carry plenty of colons that are not separators at all ("90 Day: The
+// Last Resort", "Restaurant Impossible: Last Call"), and tournament prefixes
+// that differ from the league ("ATP Cincinnati:" under a Tennis category) are
+// worth keeping, so anything that doesn't match is left alone.
+//
+// Matching is on token runs, not exact strings, because the two sides reach us
+// by different routes and rarely agree verbatim: the prefix comes from the event
+// title ("Europe - UEFA Conference League") while the league comes from the
+// category, canonicalised ("UEFA Conference League"). Either may carry the extra
+// qualifier, so containment is checked both ways.
+function tokens(s) {
+  return stripEmoji(s)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+}
+
+function containsRun(haystack, needle) {
+  if (!needle.length || needle.length > haystack.length) return false;
+  return haystack.some(
+    (_, i) =>
+      i + needle.length <= haystack.length && needle.every((tok, j) => haystack[i + j] === tok),
+  );
+}
+
+function stripLeaguePrefix(name, league) {
+  const str = String(name ?? '').trim();
+  const lTok = tokens(league);
+  if (!lTok.length) return str;
+
+  const idx = str.search(LEAGUE_SEP_RE);
+  if (idx > 0) {
+    const prefix = str.slice(0, idx).trim();
+    const rest = str.slice(idx + 1).trim();
+    const pTok = tokens(prefix);
+    if (rest && pTok.length) {
+      const canonP = canonicalLeague(prefix);
+      const sameLeague =
+        containsRun(pTok, lTok) ||
+        containsRun(lTok, pTok) ||
+        (canonP && canonP === canonicalLeague(league));
+      if (sameLeague) return rest;
+    }
+    return str;
+  }
+
+  // Some categories repeat the league as a bare leading word with no separator
+  // at all ("Tennis" + "Tennis ATP Cincinnati" -> "Tennis: Tennis ATP ..."), so
+  // drop a leading run too. Requires a couple of tokens left over, so a name
+  // that is only the league survives rather than being emptied out.
+  const words = str.split(/\s+/);
+  if (words.length > lTok.length + 1 && containsRun(tokens(words.slice(0, lTok.length)), lTok)) {
+    return words.slice(lTok.length).join(' ');
+  }
+  return str;
+}
+
+module.exports = { stripEmoji, normalizeLeagueLabel, normalizeEventName, stripLeaguePrefix };
