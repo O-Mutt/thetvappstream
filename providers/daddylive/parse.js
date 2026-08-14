@@ -197,7 +197,12 @@ function leagueAndMatchup(eventStr, categoryLabel) {
 // games. Unparseable headers fall through to the relabel-to-today path, since
 // some mirrors genuinely mislabel an otherwise-current schedule.
 //
-// opts: { nowSec, scheduleTz='Europe/London', graceMin=45, maxAheadHours=36,
+// Times are read as UTC, not Europe/London: dlhd's own header says "Schedule
+// Time UK GMT" and it means it literally year-round. Verified against a known
+// fixture — Tigers vs Guardians listed 22:40 is a real 5:40 PM CDT first pitch,
+// which only holds if 22:40 is UTC (as BST it would land an hour early).
+//
+// opts: { nowSec, scheduleTz='UTC', graceMin=45, maxAheadHours=36,
 //         maxStaleDays=2, skipCategories=[/tv shows/i], onStaleDay=null }
 function parseSchedule(scheduleJson, opts = {}) {
   const {
@@ -230,16 +235,44 @@ function parseSchedule(scheduleJson, opts = {}) {
       if (skipCategories.some(re => re.test(category))) continue;
 
       const list = Array.isArray(categories[catKey]) ? categories[catKey] : [];
+      // dlhd lists a category's events in chronological order and lets them run
+      // past midnight without opening a new day section: a Baseball block reads
+      // 22:40, 23:05, 23:40, 00:37, 01:35 — the last two being the small hours
+      // of the NEXT day. Stamping all of them on the header date threw those
+      // events ~24h into the past, where the relevance window below silently
+      // dropped them; on 2026-08-13 that hid 5 of dlhd's 9 MLB games.
+      //
+      // So: when a time goes backwards, everything after it belongs to the next
+      // day. Capped at a single roll, because a few categories are not one
+      // chronological stream (dlhd's "Tennis" concatenates tournament umbrellas
+      // ahead of per-match rows and steps backwards twice); rolling on every
+      // decrease would fling those days into the future. One day of skew is
+      // recoverable, three is not.
+      let prevMinutes = null;
+      let dayOffset = 0;
       for (const ev of list) {
         const hhmm = /^(\d{1,2}):(\d{2})$/.exec(String(ev.time || '').trim());
         if (!hhmm) continue;
+
+        const minutes = +hhmm[1] * 60 + +hhmm[2];
+        if (prevMinutes !== null && minutes < prevMinutes && dayOffset === 0) dayOffset = 1;
+        prevMinutes = minutes;
+
         // Stamp the event on its own day-header date. Falling back to `today`
         // only when the header is unparseable — otherwise dlhd leading with
         // yesterday's section (its first .schedule__dayTitle) would relabel
         // finished games onto today. With the real date, the relevance window
         // below drops anything already over.
         const day = headerDate || today;
-        const startSec = zonedToUtcSec(day.y, day.m, day.d, +hhmm[1], +hhmm[2], scheduleTz);
+        // Date.UTC normalises a day past month end, so d + 1 rolls correctly.
+        const startSec = zonedToUtcSec(
+          day.y,
+          day.m,
+          day.d + dayOffset,
+          +hhmm[1],
+          +hhmm[2],
+          scheduleTz,
+        );
 
         const { league, matchup } = leagueAndMatchup(ev.event, category);
         if (!matchup) continue;
