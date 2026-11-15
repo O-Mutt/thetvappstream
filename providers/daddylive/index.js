@@ -119,12 +119,52 @@ class DaddyLiveProvider extends Provider {
       this.eventsCache = [];
       return;
     }
+    // Start each refresh from the most preferred live mirror, so a domain that
+    // was skipped while down or frozen is picked back up once it recovers.
+    if (this.mirrors.urls.length > 1) await this.mirrors.preferFirst();
+
+    // A frozen mirror (dlhd.st served a 201-day-old schedule in Nov 2026), a
+    // redesign or a block page served as 200 still passes the liveness probe,
+    // which only checks the 24/7 channel list. dlhd always lists games, so zero
+    // current events from both sources means this mirror is no use for events:
+    // try the next one. `tried` stops the ring from spinning back to a mirror
+    // that already came up empty this refresh.
+    const tried = new Set();
+    for (;;) {
+      const base = this.base();
+      tried.add(base);
+      const { events, source } = await this._collectEvents(base);
+      if (events.length) {
+        this.eventsCache = events;
+        console.log(
+          `[daddylive] schedule (${source}): ${events.length} current event(s) via ${base}`,
+        );
+        return;
+      }
+      if (this.mirrors.urls.length < 2) break;
+      await this.mirrors.rotate();
+      const next = this.base();
+      if (tried.has(next)) {
+        console.warn(
+          `[daddylive] no mirror lists any current events (tried ${[...tried].join(', ')})`,
+        );
+        break;
+      }
+      console.warn(`[daddylive] ${base} lists no current events; retrying on ${next}`);
+    }
+
+    this._keepLastGoodEvents();
+  }
+
+  // One schedule read against the active mirror: the homepage first, then the
+  // static JSON. Returns the events and which source produced them.
+  async _collectEvents(base) {
     const parseOpts = {
       maxStaleDays: this.maxStaleDays,
       onStaleDay: ({ dayKey, driftDays }) =>
         console.warn(
-          `[daddylive] rejected stale schedule day "${dayKey}" (${driftDays}d from today); ` +
-            `mirror ${this.base()} is frozen — contributing 0 events`,
+          `[daddylive] rejected stale schedule day "${dayKey}" (${driftDays}d from today) ` +
+            `on ${base}`,
         ),
     };
 
@@ -134,11 +174,7 @@ class DaddyLiveProvider extends Provider {
       const r = await this._get('/');
       if (r && r.status === 200 && typeof r.data === 'string') {
         const events = parseScheduleHtml(r.data, parseOpts);
-        if (events.length) {
-          this.eventsCache = events;
-          console.log(`[daddylive] schedule (html): ${events.length} current event(s)`);
-          return;
-        }
+        if (events.length) return { events, source: 'html' };
       }
     } catch (e) {
       console.error(`[daddylive] schedule html: ${e.message}`);
@@ -151,17 +187,13 @@ class DaddyLiveProvider extends Provider {
       if (r && r.status === 200) {
         const json = typeof r.data === 'string' ? JSON.parse(r.data) : r.data;
         const events = parseSchedule(json, parseOpts);
-        if (events.length) {
-          this.eventsCache = events;
-          console.log(`[daddylive] schedule (json): ${events.length} current event(s)`);
-          return;
-        }
+        if (events.length) return { events, source: 'json' };
       }
     } catch (e) {
       console.error(`[daddylive] schedule fetch: ${e.message}`);
     }
 
-    this._keepLastGoodEvents();
+    return { events: [], source: null };
   }
 
   // dlhd always lists games, so zero from both sources means the fetch failed,
