@@ -84,10 +84,15 @@ For thetvapp:
   further along (the video host itself) aren't retried on other mirrors,
   because every mirror shares that host.
 
-DaddyLive switches mirrors on connection errors only. If neither its schedule
-page nor its schedule JSON returns any games (dlhd refusing the connection, for
-example), the last good event list is kept, minus games that have ended, so
-in-progress channels stay in the M3U until the next refresh.
+DaddyLive switches mirrors on connection errors, and also when a mirror answers
+but lists no current games. A frozen mirror serving an old schedule (dlhd.st
+served one from April 2026 in November 2026), a redesign, or a block page all
+pass the liveness probe, which only checks the 24/7 channel list. When neither
+the schedule page nor the schedule JSON yields a current game, the next live
+mirror is tried, each at most once per refresh. Each refresh starts from the
+most preferred live mirror, so a recovered domain is picked back up. If no
+mirror lists games, the last good event list is kept, minus games that have
+ended, so in-progress channels stay in the M3U until the next refresh.
 
 ## Endpoints
 
