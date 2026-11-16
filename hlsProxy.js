@@ -13,23 +13,80 @@ function proxyUri(uri, manifestUrl, base, streamId) {
   return `${base}/hlsseg/${encodeURIComponent(streamId)}?u=${encodeURIComponent(abs)}`;
 }
 
-// Rewrite an m3u8 body. Variant playlists (#EXT-X-STREAM-INF) and segment lines
-// are bare URIs; EXT-X-KEY / EXT-X-MEDIA / EXT-X-MAP carry URI="..." attributes.
-function rewriteManifest(manifestText, manifestUrl, base, streamId) {
+// Apply `mapUri` to every URI in an m3u8 body. Variant playlists
+// (#EXT-X-STREAM-INF) and segment lines are bare URIs; EXT-X-KEY /
+// EXT-X-MEDIA / EXT-X-MAP carry URI="..." attributes.
+function mapManifestUris(manifestText, mapUri) {
   return String(manifestText)
     .split(/\r?\n/)
     .map(line => {
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (trimmed.startsWith('#')) {
-        return line.replace(
-          /URI="([^"]+)"/g,
-          (_m, uri) => `URI="${proxyUri(uri, manifestUrl, base, streamId)}"`,
-        );
+        return line.replace(/URI="([^"]+)"/g, (_m, uri) => `URI="${mapUri(uri)}"`);
       }
-      return proxyUri(trimmed, manifestUrl, base, streamId);
+      return mapUri(trimmed);
     })
     .join('\n');
+}
+
+function rewriteManifest(manifestText, manifestUrl, base, streamId) {
+  return mapManifestUris(manifestText, uri => proxyUri(uri, manifestUrl, base, streamId));
+}
+
+// Same playlist, served from somewhere other than where it was fetched: every
+// relative URI is pinned to the upstream it was relative to.
+function absolutizeManifest(manifestText, manifestUrl) {
+  return mapManifestUris(manifestText, uri => new URL(uri, manifestUrl).href);
+}
+
+function variantHeight(streamInfLine) {
+  const m = /RESOLUTION=\d+x(\d+)/i.exec(streamInfLine);
+  return m ? Number(m[1]) : null;
+}
+
+const STREAM_INF_RE = /^#EXT-X-STREAM-INF:/i;
+
+// Tallest rendition a master playlist advertises, or null for a media playlist
+// or a master that states no RESOLUTION.
+function maxVariantHeight(manifestText) {
+  let max = null;
+  for (const line of String(manifestText).split(/\r?\n/)) {
+    if (!STREAM_INF_RE.test(line.trim())) continue;
+    const h = variantHeight(line);
+    if (h && (max === null || h > max)) max = h;
+  }
+  return max;
+}
+
+// Drop master-playlist renditions shorter than `minHeight`, but only when one
+// at or above it remains. Players (Plex especially) start on the lowest
+// rendition and often never climb, so a 240p entry in the list is what the
+// viewer ends up watching. Renditions with no RESOLUTION are kept: unknown
+// isn't known-bad.
+function filterLowVariants(manifestText, minHeight) {
+  const text = String(manifestText);
+  if (!minHeight) return text;
+  const lines = text.split(/\r?\n/);
+  const heights = lines.filter(l => STREAM_INF_RE.test(l.trim())).map(variantHeight);
+  const keepsOne = heights.some(h => h !== null && h >= minHeight);
+  const dropsOne = heights.some(h => h !== null && h < minHeight);
+  if (!keepsOne || !dropsOne) return text;
+  const out = [];
+  let dropUri = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (STREAM_INF_RE.test(t)) {
+      const h = variantHeight(t);
+      dropUri = h !== null && h < minHeight;
+      if (dropUri) continue;
+    } else if (dropUri && t && !t.startsWith('#')) {
+      dropUri = false;
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 function isManifest(url, contentType) {
@@ -98,7 +155,9 @@ const WHOLE_BODY_RANGE_RE = /^\s*bytes\s*=\s*0\s*-\s*$/i;
 const PEEK_TIMEOUT_MS = 15000;
 
 // Probe a stream URL with the headers it needs and classify it:
-//   { kind: 'hls', text, finalUrl }    a playlist with segments/variants
+//   { kind: 'hls', text, finalUrl, height }   a playlist with segments/variants;
+//                                       height is the tallest advertised
+//                                       rendition, null when not stated
 //   { kind: 'direct', contentType, finalUrl }   a non-HLS media body (an
 //                                       endless MPEG-TS feed, a progressive file)
 //   null                                not playable
@@ -143,7 +202,7 @@ async function probeStream(url, headers, { http = axios, timeout = 15000 } = {})
   const buf = await collect(body, first, MAX_MANIFEST_BYTES);
   const text = buf.toString('utf8');
   if (!/#EXTINF|#EXT-X-STREAM-INF/.test(text)) return null;
-  return { kind: 'hls', text, finalUrl };
+  return { kind: 'hls', text, finalUrl, height: maxVariantHeight(text) };
 }
 
 // HLS-only variant of probeStream for sources that are always HLS: returns
@@ -160,7 +219,8 @@ const PASSTHROUGH_HEADERS = ['content-range', 'accept-ranges'];
 
 // Express handler factory. `lookupHeaders(streamId)` returns the headers stored
 // for that stream at resolve time (or null).
-function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios }) {
+// `minHeight` is the quality floor applied to every master playlist served.
+function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios, minHeight = 0 }) {
   // GET /channel manifest entrypoint is handled by app.js; this serves the
   // nested manifest + segments once the entry URL is known. Pass `manifest`
   // (from fetchManifest) when the caller already downloaded it while
@@ -173,7 +233,29 @@ function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios }) {
     }
     res
       .type('application/vnd.apple.mpegurl')
-      .send(rewriteManifest(m.text, m.finalUrl || url, base, streamId));
+      .send(
+        rewriteManifest(filterLowVariants(m.text, minHeight), m.finalUrl || url, base, streamId),
+      );
+  }
+
+  // For a stream that needs no headers and would otherwise be a 302: when its
+  // master lists renditions below the floor, serve the filtered master
+  // ourselves, with variant URIs pointing straight upstream so segments still
+  // bypass this server. Returns false (nothing sent) when there is nothing to
+  // filter, so the caller can redirect as before.
+  //
+  // The upstream now sees the master fetched from this server and the
+  // variants from the player. That holds for the usual same-network setup; a
+  // source that pins tokens to the fetching IP across different networks would
+  // break here, and MIN_VIDEO_HEIGHT=0 restores the plain redirect.
+  function serveFilteredMaster(res, { url, manifest }) {
+    if (!manifest || manifest.kind !== 'hls') return false;
+    const filtered = filterLowVariants(manifest.text, minHeight);
+    if (filtered === manifest.text) return false;
+    res
+      .type('application/vnd.apple.mpegurl')
+      .send(absolutizeManifest(filtered, manifest.finalUrl || url));
+    return true;
   }
 
   async function segment(req, res) {
@@ -218,7 +300,14 @@ function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios }) {
       const finalUrl = upstream.request?.res?.responseUrl || target;
       res
         .type('application/vnd.apple.mpegurl')
-        .send(rewriteManifest(buf.toString('utf8'), finalUrl, base, streamId));
+        .send(
+          rewriteManifest(
+            filterLowVariants(buf.toString('utf8'), minHeight),
+            finalUrl,
+            base,
+            streamId,
+          ),
+        );
     };
 
     // Nested manifests (variant -> media playlist) must be rewritten too;
@@ -286,7 +375,7 @@ function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios }) {
     body.pipe(res);
   }
 
-  return { serveManifest, segment, passthrough };
+  return { serveManifest, serveFilteredMaster, segment, passthrough };
 }
 
 function relayHeaders(res, upstream, ctype) {
@@ -299,6 +388,9 @@ function relayHeaders(res, upstream, ctype) {
 
 module.exports = {
   rewriteManifest,
+  absolutizeManifest,
+  maxVariantHeight,
+  filterLowVariants,
   proxyUri,
   isManifest,
   looksLikeManifest,

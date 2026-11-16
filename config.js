@@ -76,4 +76,12 @@ module.exports = {
   // or a JSON array of { name, m3u, epg?, group? }. See providers/m3u/parse.js.
   M3U_SOURCES: process.env.M3U_SOURCES || '',
   STREAM_CACHE_MS: parseNonNegativeInt(process.env.STREAM_CACHE_MS, 10 * 60 * 1000),
+  // Sources below this height rank after every source at or above it, and
+  // master-playlist renditions below it are hidden from players whenever a
+  // rendition at or above it exists. 0 turns both off.
+  MIN_VIDEO_HEIGHT: parseNonNegativeInt(process.env.MIN_VIDEO_HEIGHT, 720),
+  // Total time one tune may spend walking a channel's sources. Plex gives up
+  // on a tune after roughly a minute, and browser-backed sources take 10-30s
+  // each, so an unbounded walk ends in a timeout instead of a stream.
+  RESOLVE_BUDGET_MS: parsePositiveInt(process.env.RESOLVE_BUDGET_MS, 45 * 1000),
 };

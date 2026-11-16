@@ -227,3 +227,90 @@ test('passthrough relays a header-locked non-HLS body with its headers', async (
   assert.strictEqual(res.headers['content-type'], 'video/mp2t');
   assert.deepStrictEqual(Buffer.concat(chunks), Buffer.from([0x47, 1, 2]));
 });
+
+const { filterLowVariants, maxVariantHeight, absolutizeManifest } = require('../hlsProxy');
+
+const MASTER = [
+  '#EXTM3U',
+  '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=426x240',
+  'low/index.m3u8',
+  '#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720',
+  'mid/index.m3u8',
+  '#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080',
+  'high/index.m3u8',
+].join('\n');
+
+test('maxVariantHeight reads the tallest rendition, null for a media playlist', () => {
+  assert.strictEqual(maxVariantHeight(MASTER), 1080);
+  assert.strictEqual(maxVariantHeight('#EXTM3U\n#EXTINF:6,\na.ts'), null);
+});
+
+test('filterLowVariants drops sub-floor renditions and their URIs', () => {
+  const out = filterLowVariants(MASTER, 720);
+  assert.doesNotMatch(out, /240|low\/index/);
+  assert.match(out, /mid\/index\.m3u8/);
+  assert.match(out, /high\/index\.m3u8/);
+});
+
+test('filterLowVariants leaves a master alone when nothing would remain', () => {
+  const allLow =
+    '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=640x360\na.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=426x240\nb.m3u8';
+  assert.strictEqual(filterLowVariants(allLow, 720), allLow);
+});
+
+test('filterLowVariants keeps renditions with no RESOLUTION and ignores media playlists', () => {
+  const mixed =
+    '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nnores.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=426x240\nlow.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=1920x1080\nhi.m3u8';
+  const out = filterLowVariants(mixed, 720);
+  assert.match(out, /nores\.m3u8/);
+  assert.doesNotMatch(out, /low\.m3u8/);
+  const media = '#EXTM3U\n#EXTINF:6,\na.ts';
+  assert.strictEqual(filterLowVariants(media, 720), media);
+  assert.strictEqual(filterLowVariants(MASTER, 0), MASTER);
+});
+
+test('absolutizeManifest pins relative URIs to the upstream playlist', () => {
+  const out = absolutizeManifest(MASTER, 'https://cdn.x/live/master.m3u8?tok=1');
+  assert.match(out, /^https:\/\/cdn\.x\/live\/high\/index\.m3u8$/m);
+});
+
+test('probeStream reports the tallest rendition of a master playlist', async () => {
+  const { http } = streamHttp(200, 'application/vnd.apple.mpegurl', [MASTER]);
+  const p = await probeStream('https://cdn.x/m.m3u8', {}, { http });
+  assert.strictEqual(p.height, 1080);
+});
+
+test('serveFilteredMaster serves the filtered master with upstream variant URIs', async () => {
+  const hls = createHlsHandlers({
+    lookupHeaders: () => null,
+    baseUrlFor: () => BASE,
+    minHeight: 720,
+  });
+  const res = fakeRes();
+  const done = res.body();
+  const served = hls.serveFilteredMaster(res, {
+    url: 'https://cdn.x/live/master.m3u8',
+    manifest: { kind: 'hls', text: MASTER, finalUrl: 'https://cdn.x/live/master.m3u8' },
+  });
+  assert.strictEqual(served, true);
+  const out = await done;
+  assert.doesNotMatch(out, /low\/index/);
+  assert.match(out, /^https:\/\/cdn\.x\/live\/mid\/index\.m3u8$/m);
+  assert.doesNotMatch(out, /hlsseg/, 'segments still go straight upstream');
+});
+
+test('serveFilteredMaster declines when there is nothing to filter', () => {
+  const hls = createHlsHandlers({
+    lookupHeaders: () => null,
+    baseUrlFor: () => BASE,
+    minHeight: 720,
+  });
+  const res = fakeRes();
+  const media = {
+    kind: 'hls',
+    text: '#EXTM3U\n#EXTINF:6,\na.ts',
+    finalUrl: 'https://cdn.x/a.m3u8',
+  };
+  assert.strictEqual(hls.serveFilteredMaster(res, { url: 'u', manifest: media }), false);
+  assert.strictEqual(hls.serveFilteredMaster(res, { url: 'u', manifest: null }), false);
+});
