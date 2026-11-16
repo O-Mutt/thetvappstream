@@ -150,6 +150,31 @@ The floor is `MIN_VIDEO_HEIGHT` (default 720).
   guide-less copy (dlhd) never blanks a copy with a guide. Provider guide
   rows for channels the provider no longer lists are not emitted.
 
+#### Linear allowlist (`linearFilter.js`, #47)
+
+`LINEAR_FILTER` is a comma-separated list of networks to keep, for example
+`ESPN,ESPNU,ESPNews,Fox Sports,FS1,NFL Network,RedZone,NBA TV,Sky Sports`.
+Unset keeps every linear channel. It applies after merging, to the M3U and
+the guide alike.
+
+- Entries are matched by network key, so any spelling of a network works
+  (`ESPN USA`, `espn`).
+- An entry keeps its **family**: networks whose key starts with the entry's
+  words, as whole words. `ESPN` keeps ESPN, ESPN 2 and ESPN Deportes. ESPNU
+  and ESPNews are single words, so they are listed separately.
+- A family match leaves out **regional editions** (a key with a market word
+  such as `nl`, `mx`, `au`, `de`, `italy`, `brasil`, `argentina`) unless the
+  entry names that market. `ESPN MX` adds the Mexican feeds; `Sky Sports`
+  keeps the UK channels but not `Sky Sports F1 DE`.
+- `=ESPN` keeps exactly one network.
+- Dropped channel names are listed under `linear` at `/debug/dropped`, and
+  the kept/total count is logged when it changes.
+
+On dlhd's 899 channels plus StreamFree's five (2026-11-16), the example list
+above, with `MLB Network, NHL Network, CBS Sports Network, TNT, TBS, Golf
+Channel, Willow` added, kept 30 networks: the US sports channels and Sky's UK
+sports channels.
+
 ### 5. Event allowlist (`EventFilter.js`, `sports.js`)
 
 `EVENT_FILTER` is a comma-separated list of sports and/or competitions, for

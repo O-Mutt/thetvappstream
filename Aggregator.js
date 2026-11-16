@@ -3,11 +3,18 @@ const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId, stripTime, sameGame } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
 const { normalizeLeagueLabel, normalizeEventName, stripLeaguePrefix } = require('./displayName');
-const { PUBLIC_BASE_URL, STREAM_CACHE_MS, RESOLVE_BUDGET_MS, EVENT_FILTER } = require('./config');
+const {
+  PUBLIC_BASE_URL,
+  STREAM_CACHE_MS,
+  RESOLVE_BUDGET_MS,
+  EVENT_FILTER,
+  LINEAR_FILTER,
+} = require('./config');
 const { SourceRanker, sourceKey } = require('./SourceRanker');
 const { createEventFilter } = require('./EventFilter');
 const { inferSport } = require('./sports');
 const { networkKey } = require('./networkKey');
+const { createLinearFilter } = require('./linearFilter');
 
 // streamRef / altStreamRefs entries are a bare ref or { ref, quality }.
 function normalizeRef(r) {
@@ -81,9 +88,12 @@ function normalizeLinear(channels) {
 // game, league as the group-title, "@ <time>" preserved in the name. That's
 // what keeps the recording scheduler provider-agnostic.
 class Aggregator {
-  constructor(providers, { eventFilter = EVENT_FILTER } = {}) {
+  constructor(providers, { eventFilter = EVENT_FILTER, linearFilter = LINEAR_FILTER } = {}) {
     this.providers = providers || [];
     this.eventFilter = createEventFilter(eventFilter);
+    this.linearFilter = createLinearFilter(linearFilter);
+    // Linear channels LINEAR_FILTER removed on the last listing pass.
+    this.droppedLinear = [];
     // Events EVENT_FILTER removed on the last listing pass, for /debug/dropped.
     this.dropped = [];
     this._droppedKeys = new Set();
@@ -240,7 +250,19 @@ class Aggregator {
         }
       }
     }
-    return [...byKey.values()];
+    const all = [...byKey.values()];
+    if (!this.linearFilter) {
+      this.droppedLinear = [];
+      return all;
+    }
+    const kept = all.filter(ch => this.linearFilter.keep(ch.id.slice('live:'.length)));
+    const dropped = all.filter(ch => !kept.includes(ch)).map(ch => ch.name);
+    // Runs on every M3U fetch and EPG build: log only when the result changes.
+    if (dropped.length !== this.droppedLinear.length) {
+      console.log(`[filter] kept ${kept.length} of ${all.length} linear channel(s)`);
+    }
+    this.droppedLinear = dropped;
+    return kept;
   }
 
   // Build merged M3U rows and (re)populate the stream index that resolveStream
@@ -493,6 +515,11 @@ class Aggregator {
       filter: this.eventFilter ? this.eventFilter.entries : null,
       count: this.dropped.length,
       dropped: this.dropped,
+      linear: {
+        filter: this.linearFilter ? this.linearFilter.entries : null,
+        count: this.droppedLinear.length,
+        dropped: this.droppedLinear,
+      },
     };
   }
 
