@@ -130,3 +130,13 @@ test('resolveStream does not try other mirrors for an embed/CDN failure', async 
   await assert.rejects(() => p.resolveStream('/tv-live/soccer/x-y/1'), /not playable/);
   assert.deepStrictEqual(tried, [A]);
 });
+
+test('a mirror serving the card markup probes live', async () => {
+  const CARD_PAGE =
+    '<a class="game" data-status="soon" href="/tv-live/nba/a-b/1"><span class="matchup">A vs B</span></a>';
+  const http = { get: async () => ({ status: 200, data: CARD_PAGE }) };
+  const p = provider([A], http);
+  assert.strictEqual(await p._probe(A), true);
+  const parked = provider([A], { get: async () => ({ status: 200, data: PARKED }) });
+  assert.strictEqual(await parked._probe(A), false);
+});
