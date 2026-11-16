@@ -18,9 +18,10 @@ function parseNonNegativeInt(v, fallback) {
 
 module.exports = {
   PORT: process.env.PORT || 5000,
-  // Ordered list of enabled stream sources (see providers/index.js registry).
-  // First-listed wins for same-game event fallback ordering.
-  PROVIDERS: (process.env.PROVIDERS || 'thetvapp')
+  // Enabled stream sources (see providers/index.js registry). Source ranking
+  // orders a channel's sources by health and quality; this order only breaks
+  // ties. StreamFree is on by default because it serves 1080p over plain HTTP.
+  PROVIDERS: (process.env.PROVIDERS || 'thetvapp,streamfree')
     .split(',')
     .map(s => s.trim())
     // PROVIDERS=none runs only the M3U_SOURCES feeds.
