@@ -41,7 +41,7 @@ channel as automatic fallbacks.
 | R5  | One linear channel per network across all providers.                                                                                                                                    |
 | R6  | An optional allowlist limits event channels to chosen sports and leagues. The match tolerates labeling variations, so a boxing card is not dropped because a source called it "combat". |
 | R7  | Each dropped event is logged with its raw labels.                                                                                                                                       |
-| R8  | New providers: StreamFree (plain HTTP) and PPV.ST (headless browser).                                                                                                                   |
+| R8  | New providers: StreamFree (plain HTTP). PPV.ST was shelved; see section 7.                                                                                                              |
 | R9  | Ranking and health decisions can be inspected without reading logs.                                                                                                                     |
 
 ## Design
@@ -331,50 +331,82 @@ refresh happens in between.
 
 **Cost:** `http`.
 
-### 7. PPV.ST provider (`providers/ppv/`)
+### 7. PPV.ST provider (shelved)
 
-Probed 2026-11-16.
+Status: shelved 2026-11-16 (#36 closed). Recorded so it can be picked up
+again.
 
-**Listing**
-
-`GET https://api.ppv.st/api/streams` (alternate host: `api.ppv.cx`). It
-returned about 170 entries covering a week ahead. The response includes
+**Listing (works over plain HTTP).** `GET https://api.ppv.st/api/streams`
+(alternate host: `api.ppv.cx`) returned 195 entries for the week ahead on
+2026-11-16. The response says
 `"READ_ME": "Interested in using our API? Contact us for more information."`,
-so this API is not formally public the way StreamFree's is.
+so the API is not formally public the way StreamFree's is.
 
 ```json
-{ "success": true, "timestamp": 1794824230, "streams": [ {
-  "category": "Basketball", "id": 1, "always_live": false, "streams": [ {
-    "id": 32231, "name": "Orlando Magic vs. Boston Celtics", "tag": "NBA",
-    "source_tag": "HD | NBCSN", "uri_name": "nba/2026-11-16/orl-bos",
-    "starts_at": 1794873600, "ends_at": 1794884400, "always_live": 0,
-    "category_name": "Basketball",
-    "iframe": "https://taifood-blog.asia/embed/nba/2026-11-16/orl-bos",
-    "substreams": [ ... ] } ] } ] }
+{
+  "success": true,
+  "timestamp": 1794824230,
+  "streams": [
+    {
+      "category": "Basketball",
+      "id": 1,
+      "always_live": false,
+      "streams": [
+        {
+          "id": 32231,
+          "name": "Orlando Magic vs. Boston Celtics",
+          "tag": "NBA",
+          "source_tag": "HD | NBCSN",
+          "uri_name": "nba/2026-11-16/orl-bos",
+          "starts_at": 1794873600,
+          "ends_at": 1794884400,
+          "always_live": 0,
+          "category_name": "Basketball",
+          "iframe": "https://taifood-blog.asia/embed/nba/2026-11-16/orl-bos",
+          "substreams": [
+            {
+              "uri_name": "nba/2026-11-16/orl-bos_540p",
+              "source_tag": "SD | NBCSN",
+              "iframe": "..."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
-- `always_live: 1` marks a linear channel (for example NFL Network, NHL
-  Network, Willow). Other entries are events with real start and end times.
-- `category_name` maps to `sport`: `American Football` is
+- 16 entries have `always_live: 1` (category `24/7 Streams` or a sport):
+  NFL Network, NHL Network, Willow, Sky Sports Golf, Sky Sports Racing, Fox
+  Footy/Cricket/League, CNN, Fox News, and cartoon loops.
+- `category_name` would map to `sport`: `American Football` is
   `american-football`, `Football` is `soccer`, `Ice Hockey` is `hockey`.
-- `tag` is the league.
-- Matchups use both `at` and `vs.` as separators. Check that `teamsOf` in
-  `canonicalName.js` splits on both.
-- `source_tag` with an `HD` prefix is a quality hint of height 720 or more.
-- `substreams` are alternate feeds and become `altStreamRefs`. Their fields
-  have not been examined yet.
-- The `iframe` host rotates. It is read from each refresh and never
-  hardcoded.
+- `tag` is the league. `source_tag` is `HD | <broadcaster>` or
+  `SD | <broadcaster>`; `substreams` hold the SD (540p) copy.
+- The `iframe` host rotates and must be read from each refresh.
 
-**Resolving a ref**
+**Playback (does not work with our browser).** The embed page loads
+`bundle-jw.js` and a WebAssembly module (`gasm.wasm`), POSTs to `/fetch`,
+receives an encrypted `application/octet-stream` body, then fails to load a
+script and never requests a playlist:
 
-- The embed page builds the stream URL in about 268 KB of obfuscated inline
-  script, so the URL cannot be extracted with plain HTTP.
-- Resolve with `browser.sniffStream(iframe, { referer: 'https://ppv.st/' })`,
-  which captures the `.m3u8` request and its headers.
-- Whether the manifest and segments require headers is not yet verified.
+- Opened top-level, the page shows "Remove sandbox attributes on the iframe
+  tag".
+- Inside ppv.st's own watch page (`https://ppv.st/live/<uri_name>`), the
+  page loads its stream record from `api.ppv.st/api/streams/<uri_name>` and
+  frames the embed, but the embed again stops after `/fetch`.
 
-**Cost:** `browser`.
+Our Playwright launch is easy to identify as automated: its user agent says
+Chrome 124 while its client hints say `HeadlessChrome 148`, and
+`navigator.webdriver` is set. Making playback work would mean disguising the
+browser to get past the site's bot detection. We decided not to do that, given
+the API's "contact us" notice, and to look for another plain-HTTP source
+instead.
+
+A PPV provider must not ship with a resolver that fails. Its events would
+merge into existing game channels as extra sources, and each failed attempt
+holds a browser session for about 40 s of the 45 s tune budget.
 
 ### 8. Diagnostics
 
@@ -428,7 +460,8 @@ in ranking.
 2. StreamFree provider.
 3. `sport` field and `EVENT_FILTER`.
 4. Linear dedupe, which includes the `tvg-id` migration.
-5. PPV provider.
+5. ~~PPV provider~~ Shelved (section 7). Another plain-HTTP source is being
+   evaluated in its place.
 
 Each step is a separate PR.
 
@@ -442,7 +475,9 @@ Each step is a separate PR.
    linear channels. They stay listed with no source attached (Sky Sports F1
    and Willow had none on 2026-11-16), and their ids are UUIDs with creation
    dates months old. See section 6.
-3. **PPV terms:** its API says "contact us". Using it is a policy call.
+3. ~~**PPV terms**~~ Decided 2026-11-16: PPV is shelved. Playback needs a
+   browser disguised to get past bot detection, and its API says "contact
+   us". See section 7.
 4. **Failover during playback:** once a proxied stream is playing, a source
    that dies mid-game is only replaced when the player reloads the channel URL.
    Switching sources inside `/hlsseg` is a separate piece of work.
