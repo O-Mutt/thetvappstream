@@ -1,6 +1,6 @@
 const express = require('express');
 const { baseUrlFor } = require('./baseUrl');
-const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS } = require('./config');
+const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS, MIN_VIDEO_HEIGHT } = require('./config');
 const { createAggregator } = require('./providers');
 const { createHlsHandlers, probeStream } = require('./hlsProxy');
 const { buildSplitLogo, renderEventArt } = require('./logoCompositor');
@@ -18,6 +18,7 @@ const streamHeaders = new Map();
 const hls = createHlsHandlers({
   lookupHeaders: id => streamHeaders.get(id) || null,
   baseUrlFor: req => baseUrlFor(req, PUBLIC_BASE_URL),
+  minHeight: MIN_VIDEO_HEIGHT,
 });
 
 app.get('/channels.m3u', async (req, res) => {
@@ -62,13 +63,21 @@ app.get('/channel/:id', async (req, res) => {
         base: baseUrlFor(req, PUBLIC_BASE_URL),
         manifest: check && check.kind === 'hls' ? check : null,
       });
-    } else {
+    } else if (!hls.serveFilteredMaster(res, { url, manifest: check })) {
       res.redirect(url);
     }
   } catch (e) {
     console.error(`/channel/${req.params.id}: ${e.message}`);
     res.status(404).send('Channel does not exist, or is blocked.');
   }
+});
+
+// Why a channel plays the source it does: its sources in the order the next
+// tune will try them, with each one's health, quality and resolve cost.
+app.get('/debug/sources/:id', (req, res) => {
+  const info = aggregator.explainSources(req.params.id);
+  if (!info) return res.status(404).json({ error: 'unknown channel id' });
+  res.json(info);
 });
 
 app.get('/hlsseg/:streamId', (req, res) => {

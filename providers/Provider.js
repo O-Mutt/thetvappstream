@@ -24,10 +24,19 @@ class Provider {
     return {};
   }
 
+  // How expensive resolveStream is: 'http' or 'browser'. Between two sources
+  // of equal health and quality, the cheaper one is tried first.
+  get resolveCost() {
+    return 'http';
+  }
+
   // Live sport events, normalized:
-  //   [{ league, name, startSec, endSec, streamRef, logo }]
+  //   [{ league, name, startSec, endSec, streamRef, altStreamRefs?, logo }]
   // `name` is preserved verbatim downstream (the Dispatcharr scheduler parses
   // the "@ <time>" suffix out of it), so keep it human-readable.
+  // streamRef / altStreamRefs entries are either a plain ref or
+  // { ref, quality: { height } } when the source states its quality; the
+  // height feeds source ranking.
   async listEvents() {
     return [];
   }
@@ -43,7 +52,7 @@ class Provider {
   }
 
   // Resolve an opaque streamRef to a playable stream:
-  //   { url, headers? }
+  //   { url, headers?, quality?: { height } }
   async resolveStream(streamRef) {
     throw new Error(`provider '${this.name}' must implement resolveStream (ref=${streamRef})`);
   }

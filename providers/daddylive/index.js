@@ -44,6 +44,10 @@ class DaddyLiveProvider extends Provider {
     return 'daddylive';
   }
 
+  get resolveCost() {
+    return 'browser';
+  }
+
   async _probe(url) {
     try {
       const r = await this.client.get(`${url}${CHANNELS_PATH}`, {

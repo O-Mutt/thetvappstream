@@ -3,7 +3,32 @@ const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId, stripTime, sameGame } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
 const { normalizeLeagueLabel, normalizeEventName, stripLeaguePrefix } = require('./displayName');
-const { PUBLIC_BASE_URL, STREAM_CACHE_MS } = require('./config');
+const { PUBLIC_BASE_URL, STREAM_CACHE_MS, RESOLVE_BUDGET_MS } = require('./config');
+const { SourceRanker, sourceKey } = require('./SourceRanker');
+
+// streamRef / altStreamRefs entries are a bare ref or { ref, quality }.
+function normalizeRef(r) {
+  if (r && typeof r === 'object') {
+    if (r.ref == null || r.ref === '') return null;
+    return r.quality ? { ref: r.ref, quality: r.quality } : { ref: r.ref };
+  }
+  return r == null || r === '' ? null : { ref: r };
+}
+
+class ResolveTimeout extends Error {}
+
+// The abandoned attempt keeps running (a provider can't be cancelled), so its
+// eventual rejection is swallowed here rather than surfacing as unhandled.
+function withTimeout(promise, ms) {
+  promise.catch(() => {});
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new ResolveTimeout(`timed out after ${ms}ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 // M3U attributes are double-quoted and the title follows the last comma, so a
 // stray quote or newline in a source-supplied string corrupts the row (and the
@@ -67,6 +92,13 @@ class Aggregator {
     // DaddyLive, so a slow source piled up sessions until the box stalled.
     this._inflight = new Map();
     this.streamCacheMs = STREAM_CACHE_MS;
+    this.resolveBudgetMs = RESOLVE_BUDGET_MS;
+    this.ranker = new SourceRanker();
+    this._providerOrder = new Map(this.providers.map((p, i) => [p.name, i]));
+    this._costOf = name => {
+      const p = this._providerByName.get(name);
+      return (p && p.resolveCost) || 'http';
+    };
     this.epgXml = null;
     this.epgLastRefresh = 0;
     this.epgRefreshing = null;
@@ -100,7 +132,7 @@ class Aggregator {
         console.error(`[${p.name}] listEvents: ${e.message}`);
       }
       for (const ev of events) {
-        if (!ev || !ev.streamRef) continue;
+        if (!ev || !normalizeRef(ev.streamRef)) continue;
         // Strip the source's own emoji/flag decoration before anything derives
         // from these strings. The league is part of the canonical key, so
         // leaving it raw splits one game's league ("⚾ 🇨🇦 MLB" vs "⚾ 🇺🇸 MLB")
@@ -145,10 +177,11 @@ class Aggregator {
         // dead feed falls through to the provider's next one before the next
         // provider.
         const refs = [ev.streamRef, ...(Array.isArray(ev.altStreamRefs) ? ev.altStreamRefs : [])];
-        for (const ref of refs) {
-          if (ref == null || ref === '') continue;
-          const dup = bucket.sources.some(s => s.providerName === p.name && s.ref === ref);
-          if (!dup) bucket.sources.push({ providerName: p.name, ref });
+        for (const raw of refs) {
+          const r = normalizeRef(raw);
+          if (!r) continue;
+          const dup = bucket.sources.some(s => s.providerName === p.name && s.ref === r.ref);
+          if (!dup) bucket.sources.push({ providerName: p.name, ...r });
         }
       }
     }
@@ -284,7 +317,9 @@ class Aggregator {
     return this.epgXml;
   }
 
-  // Resolve a public id to a playable stream, trying each source in order.
+  // Resolve a public id to a playable stream, trying its sources best-first
+  // (see SourceRanker: recent health, then quality, then resolve cost, then
+  // provider order). Every outcome is recorded so the next tune ranks better.
   //
   // `validate(stream)` (optional) is called on every candidate and must return
   // a truthy value only when the stream actually plays — app.js passes a
@@ -324,35 +359,81 @@ class Aggregator {
         cached.expires = Date.now() + this.streamCacheMs;
         return { ...cached.stream, check };
       }
+      this.ranker.recordFailure(cached.source, 'cached stream stopped validating');
       this._resolved.delete(publicId);
     }
 
+    const deadline = Date.now() + this.resolveBudgetMs;
     let lastErr;
-    for (const { providerName, ref } of sources) {
+    let attempts = 0;
+    for (const source of this._rankedSources(sources)) {
+      const { providerName, ref } = source;
       const provider = this._providerByName.get(providerName);
       if (!provider) continue;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        console.error(
+          `[aggregator] ${publicId}: resolve budget spent before trying ${sourceKey(source)} and any later sources`,
+        );
+        break;
+      }
+      const firstAttempt = attempts++ === 0;
       try {
-        const res = await provider.resolveStream(ref);
-        if (!res || !res.url) continue;
-        let check;
-        if (validate) {
-          check = await validate(res);
-          if (!check) {
-            lastErr = new Error(`${providerName}:${ref} resolved but did not validate`);
-            console.error(`[${providerName}] resolveStream(${ref}): stream did not validate`);
-            continue;
-          }
-        }
+        const { res, check } = await withTimeout(
+          this._attempt(provider, source, validate),
+          remaining,
+        );
+        const height = (check && check.height) || (res.quality && res.quality.height);
+        this.ranker.recordSuccess(source, { height });
         if (this.streamCacheMs > 0) {
-          this._resolved.set(publicId, { stream: res, expires: Date.now() + this.streamCacheMs });
+          this._resolved.set(publicId, {
+            stream: res,
+            source,
+            expires: Date.now() + this.streamCacheMs,
+          });
         }
         return check === undefined ? res : { ...res, check };
       } catch (e) {
         lastErr = e;
+        // A later source cut off by what earlier ones spent says nothing about
+        // its own health; only a source that had the whole budget is blamed.
+        if (!(e instanceof ResolveTimeout) || firstAttempt) {
+          this.ranker.recordFailure(source, e.message);
+        }
         console.error(`[${providerName}] resolveStream(${ref}): ${e.message}`);
       }
     }
     throw lastErr || new Error(`no source resolved for ${publicId}`);
+  }
+
+  async _attempt(provider, { providerName, ref }, validate) {
+    const res = await provider.resolveStream(ref);
+    if (!res || !res.url) throw new Error(`${providerName}:${ref} resolved to no stream`);
+    if (!validate) return { res, check: undefined };
+    const check = await validate(res);
+    if (!check) throw new Error(`${providerName}:${ref} resolved but did not validate`);
+    return { res, check };
+  }
+
+  _rankedSources(sources) {
+    return this.ranker.rank(sources, { providerOrder: this._providerOrder, costOf: this._costOf });
+  }
+
+  // Ranked sources for one channel with the reasons behind the order, for
+  // /debug/sources. Null for an unknown id.
+  explainSources(publicId) {
+    const sources = this.streamIndex.get(publicId);
+    if (!sources) return null;
+    const cached = this._resolved.get(publicId);
+    return {
+      id: publicId,
+      playing:
+        cached && cached.expires > Date.now() && cached.source ? sourceKey(cached.source) : null,
+      sources: this.ranker.explain(sources, {
+        providerOrder: this._providerOrder,
+        costOf: this._costOf,
+      }),
+    };
   }
 
   // Drop a cached resolution (e.g. after the upstream starts failing mid-play).

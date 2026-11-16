@@ -444,3 +444,98 @@ test('quotes and newlines in source strings cannot break M3U rows', async () => 
   assert.match(m3u, /group-title="Big 'Quoted' League"/);
   assert.strictEqual(m3u.split('\n').filter(l => l.startsWith('#EXTINF')).length, 1);
 });
+
+test('resolveStream tries the better-quality source first, whatever the provider order', async () => {
+  const a = new FakeProvider('thetvapp', {
+    events: [
+      gameEvent('Twins vs Red Sox @ May 22 7:10 PM', { ref: 'sd', quality: { height: 360 } }),
+    ],
+  });
+  const b = new FakeProvider('streamfree', {
+    events: [
+      gameEvent('Twins vs Red Sox @ May 22 7:10 PM', { ref: 'fhd', quality: { height: 1080 } }),
+    ],
+  });
+  const agg = new Aggregator([a, b]);
+  const { eventEntries } = await agg.listM3uEntries();
+  const { url } = await agg.resolveStream(eventEntries[0].streamId);
+  assert.strictEqual(url, 'http://stream/streamfree/fhd');
+  assert.deepStrictEqual(a.resolved, [], 'the 360p source was never needed');
+});
+
+test('a source that failed is tried after healthy ones on the next tune', async () => {
+  const a = new FakeProvider('thetvapp', {
+    events: [gameEvent('Twins vs Red Sox @ May 22 7:10 PM', 'flaky')],
+    failRefs: ['flaky'],
+  });
+  const b = new FakeProvider('daddylive', {
+    events: [gameEvent('Twins vs Red Sox @ May 22 7:10 PM', 'steady')],
+  });
+  const agg = new Aggregator([a, b]);
+  agg.streamCacheMs = 0;
+  const { eventEntries } = await agg.listM3uEntries();
+  const id = eventEntries[0].streamId;
+
+  await agg.resolveStream(id);
+  assert.deepStrictEqual(a.resolved, ['flaky']);
+  await agg.resolveStream(id);
+  assert.deepStrictEqual(a.resolved, ['flaky'], 'cooling down, so steady went first');
+});
+
+test('the height measured while validating is recorded for ranking', async () => {
+  const p = new FakeProvider('thetvapp', { linear: { CNN: '101' } });
+  const agg = new Aggregator([p]);
+  await agg.listM3uEntries();
+  await agg.resolveStream('thetvapp:101', { validate: () => ({ kind: 'hls', height: 1080 }) });
+  const info = agg.explainSources('thetvapp:101');
+  assert.strictEqual(info.playing, 'thetvapp:101');
+  assert.strictEqual(info.sources[0].height, 1080);
+  assert.strictEqual(info.sources[0].quality, 'fhd');
+});
+
+test('a cached stream that stops validating marks its source as failed', async () => {
+  const p = new FakeProvider('thetvapp', { linear: { CNN: '101' } });
+  const agg = new Aggregator([p]);
+  await agg.listM3uEntries();
+  let healthy = true;
+  const validate = () => (healthy ? { ok: true } : null);
+  await agg.resolveStream('thetvapp:101', { validate });
+  healthy = false;
+  await assert.rejects(() => agg.resolveStream('thetvapp:101', { validate }));
+  assert.ok(agg.explainSources('thetvapp:101').sources[0].consecutiveFailures >= 1);
+});
+
+test('the resolve budget stops a slow source and later sources are not blamed', async () => {
+  const slow = new FakeProvider('daddylive', {
+    events: [gameEvent('Twins vs Red Sox @ May 22 7:10 PM', 'hang')],
+  });
+  slow.resolveStream = () => new Promise(() => {});
+  Object.defineProperty(slow, 'resolveCost', { value: 'browser' });
+  const later = new FakeProvider('thetvapp', {
+    events: [gameEvent('Twins vs Red Sox @ May 22 7:10 PM', 'never')],
+  });
+  // Browser cost puts the hanging source behind 'never', which fails fast and
+  // leaves 'hang' with only part of the budget.
+  later.failRefs.add('never');
+  const agg = new Aggregator([slow, later]);
+  agg.resolveBudgetMs = 50;
+  const { eventEntries } = await agg.listM3uEntries();
+  await assert.rejects(() => agg.resolveStream(eventEntries[0].streamId), /timed out/);
+  const info = agg.explainSources(eventEntries[0].streamId);
+  const hang = info.sources.find(s => s.ref === 'hang');
+  assert.strictEqual(hang.consecutiveFailures, 0, 'cut off by the budget, not judged');
+});
+
+test('explainSources returns null for an unknown id', () => {
+  assert.strictEqual(new Aggregator([]).explainSources('nope'), null);
+});
+
+test('a first source that hangs through the whole budget is blamed', async () => {
+  const p = new FakeProvider('thetvapp', { linear: { CNN: '101' } });
+  p.resolveStream = () => new Promise(() => {});
+  const agg = new Aggregator([p]);
+  agg.resolveBudgetMs = 30;
+  await agg.listM3uEntries();
+  await assert.rejects(() => agg.resolveStream('thetvapp:101'), /timed out/);
+  assert.strictEqual(agg.explainSources('thetvapp:101').sources[0].consecutiveFailures, 1);
+});
