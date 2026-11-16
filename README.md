@@ -49,9 +49,11 @@ M3U_SOURCES="pluto=https://example.com/pluto/us.m3u8|https://example.com/pluto/u
 M3U_SOURCES='[{"name":"locals","m3u":"https://example.com/locals.m3u","epg":"https://example.com/locals.xml","group":"Locals"}]'
 ```
 
-- Each source becomes its own provider named after it, so its channels show up
-  as `<name>:<tvg-id>` in `tvg-id` and the guide. Names must be letters, digits,
-  `-` or `_`, and can't reuse a built-in provider name.
+- Each source becomes its own provider named after it. Names must be letters,
+  digits, `-` or `_`, and can't reuse a built-in provider name.
+- Linear channels from every provider are merged by network, and each one's
+  `tvg-id` is `live:<network>` (for example `live:espn`). See
+  `docs/upgrading.md` for the change from the old per-provider ids.
 - `tvg-logo` and `group-title` come through from the playlist (`group` in the
   JSON form overrides the group). Rows with no group land in `Live TV`.
 - Guide programmes are matched to channels by `tvg-id`, falling back to the

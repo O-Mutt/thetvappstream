@@ -246,7 +246,7 @@ test('createProviders appends one provider per M3U source and skips clashes', ()
   );
 });
 
-test('aggregator emits playlist logos/groups and namespaced guide ids for M3U channels', async () => {
+test("aggregator merges an M3U source's duplicate feeds and keeps its logos, groups and guide", async () => {
   const f = fakeFetch({ 'https://p/list.m3u': PLAYLIST, 'https://p/epg.xml': GUIDE });
   const p = new M3uProvider(
     { name: 'fast', m3u: 'https://p/list.m3u', epg: 'https://p/epg.xml' },
@@ -254,13 +254,19 @@ test('aggregator emits playlist logos/groups and namespaced guide ids for M3U ch
   );
   const agg = new Aggregator([p]);
   const m3u = await agg.getM3u('https://proxy.example.com');
+  // "News One (720p)" and "News One SD" are one network: one row, two sources.
   assert.match(
     m3u,
-    /tvg-id="fast:News1\.us" tvg-chno="1" tvg-logo="https:\/\/l\/news\.png" group-title="News, Weather", News One \(720p\)/,
+    /tvg-id="live:news-one" tvg-chno="1" tvg-logo="https:\/\/l\/news\.png" group-title="News, Weather", News One \(720p\)/,
   );
-  assert.match(m3u, /\/channel\/fast%3ANews1.us~2/);
+  assert.strictEqual((m3u.match(/News One/g) || []).length, 1);
+  assert.match(m3u, /\/channel\/live%3Anews-one\n/);
+  assert.deepStrictEqual(
+    agg.streamIndex.get('live:news-one').map(s => s.ref),
+    ['News1.us', 'News1.us~2'],
+  );
   await agg.refreshEpg();
   const xml = agg.getEpgXml();
-  assert.match(xml, /<programme channel="fast:News1\.us"/);
+  assert.match(xml, /<programme channel="live:news-one"/);
   assert.match(xml, /<desc>Headlines\.<\/desc>/);
 });
