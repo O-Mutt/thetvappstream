@@ -63,6 +63,17 @@ module.exports = {
   // Set false to serve dlhd events only — useful when an EPG-bearing source
   // (the-tv.app) is primary and the empty linear rows aren't wanted.
   DLHD_ENABLE_LINEAR: parseBool(process.env.DLHD_ENABLE_LINEAR, true),
+  // StreamFree mirrors, used when its mirror directory (strmfree.link) is
+  // unreachable. The directory's answer goes first when it is reachable.
+  STREAMFREE_URLS: (
+    process.env.STREAMFREE_URLS || 'https://strmfree.st,https://strmfree.pk,https://streamfree.top'
+  )
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean),
+  // StreamFree's 24/7 channels (RedZone, Sky Sports Tennis/Cricket/F1, Willow)
+  // carry no guide. Set false to take its games only.
+  STREAMFREE_ENABLE_LINEAR: parseBool(process.env.STREAMFREE_ENABLE_LINEAR, true),
   // How often to re-scrape the per-sport listing pages. The chids that back
   // event entries are slot ids reused across the day, so frequent refresh
   // matters more here than for the TV channel cache.

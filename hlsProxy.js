@@ -149,6 +149,23 @@ async function collect(stream, first, maxBytes = Infinity) {
   return Buffer.concat(chunks);
 }
 
+const SF_MARK = '#sf=';
+
+// "<primary>#sf=<url-encoded fallback>" -> { primary, fallback }, else null.
+function splitFallback(url) {
+  const s = String(url || '');
+  const i = s.indexOf(SF_MARK);
+  if (i <= 0) return null;
+  let fallback;
+  try {
+    fallback = decodeURIComponent(s.slice(i + SF_MARK.length));
+  } catch {
+    return null;
+  }
+  if (!/^https?:\/\//i.test(fallback)) return null;
+  return { primary: s.slice(0, i), fallback };
+}
+
 const MAX_MANIFEST_BYTES = 5 * 1024 * 1024;
 const MAX_SEGMENT_BYTES = 64 * 1024 * 1024;
 const WHOLE_BODY_RANGE_RE = /^\s*bytes\s*=\s*0\s*-\s*$/i;
@@ -275,15 +292,31 @@ function createHlsHandlers({ lookupHeaders, baseUrlFor, http = axios, minHeight 
       // Byte ranges only line up with what we relay if the body isn't re-encoded.
       reqHeaders['Accept-Encoding'] = 'identity';
     }
-    const upstream = await http.get(target, {
-      headers: reqHeaders,
-      responseType: 'stream',
-      timeout: 20000,
-      maxRedirects: 5,
-      validateStatus: () => true,
-    });
+    const get = url =>
+      http.get(url, {
+        headers: reqHeaders,
+        responseType: 'stream',
+        timeout: 20000,
+        maxRedirects: 5,
+        validateStatus: () => true,
+      });
+    const ok = r => r.status === 200 || r.status === 206;
+    // StreamFree's external CDN writes segments as "<primary>#sf=<encoded
+    // fallback>": a third-party copy first, its own CDN if that fails. HTTP
+    // drops the fragment, so the fallback has to be taken here.
+    const sf = splitFallback(target);
+    let upstream;
+    if (sf) {
+      upstream = await get(sf.primary).catch(() => null);
+      if (!upstream || !ok(upstream)) {
+        if (upstream?.data && typeof upstream.data.destroy === 'function') upstream.data.destroy();
+        upstream = await get(sf.fallback);
+      }
+    } else {
+      upstream = await get(target);
+    }
     const body = upstream.data;
-    if (upstream.status !== 200 && upstream.status !== 206) {
+    if (!ok(upstream)) {
       if (body && typeof body.destroy === 'function') body.destroy();
       res.status(502).send(`upstream segment ${upstream.status}`);
       return;
@@ -391,6 +424,7 @@ module.exports = {
   absolutizeManifest,
   maxVariantHeight,
   filterLowVariants,
+  splitFallback,
   proxyUri,
   isManifest,
   looksLikeManifest,

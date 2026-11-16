@@ -103,3 +103,28 @@ test('segment unwraps when the client sends ffmpeg\'s whole-body "Range: bytes=0
   assert.deepStrictEqual(await done, TS);
   assert.strictEqual(sent.Range, undefined);
 });
+
+// StreamFree's TikTok layout, as served on 2026-11-16: a 1x1 PNG with the
+// segment in a "tsDa" chunk between IDAT and IEND.
+async function tsDaPng(payload) {
+  const png = await sharp(Buffer.from([0, 0, 0, 0]), { raw: { width: 1, height: 1, channels: 4 } })
+    .png()
+    .toBuffer();
+  const iend = png.length - 12;
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(payload.length);
+  head.write('tsDa', 4, 'latin1');
+  const crc = Buffer.alloc(4);
+  return Buffer.concat([png.subarray(0, iend), head, payload, crc, png.subarray(iend)]);
+}
+
+test('unwrapPixelSegment returns the MPEG-TS stored in a tsDa chunk', async () => {
+  assert.deepStrictEqual(await unwrapPixelSegment(await tsDaPng(TS)), TS);
+});
+
+test('a real 1x1 PNG with no tsDa chunk is not mistaken for a segment', async () => {
+  const png = await sharp(Buffer.from([0, 0, 0, 0]), { raw: { width: 1, height: 1, channels: 4 } })
+    .png()
+    .toBuffer();
+  assert.strictEqual(await unwrapPixelSegment(png), null);
+});
