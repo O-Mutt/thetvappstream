@@ -46,7 +46,8 @@ function proxyFileName(absUrl) {
   const m = /\.([a-z0-9]{1,6})$/i.exec(path);
   const ext = m ? m[1].toLowerCase() : '';
   if (SEGMENT_EXTS.has(ext)) return `seg.${ext}`;
-  if (ext === 'm3u8' || ext === 'm3u' || /load-playlist$/i.test(path)) return 'index.m3u8';
+  if (ext === 'm3u8' || ext === 'm3u' || /load-playlist(-[a-z]+)?$/i.test(path))
+    return 'index.m3u8';
   return 'seg.ts';
 }
 

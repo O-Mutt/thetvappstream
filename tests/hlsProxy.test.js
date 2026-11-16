@@ -400,4 +400,5 @@ test('proxied urls end in a file name ffmpeg accepts', () => {
   assert.strictEqual(name('https://p19.ttcdn-us.com/obj/abc#sf=x'), 'seg.ts');
   assert.strictEqual(name('https://c/x/variant.m3u8?t=1'), 'index.m3u8');
   assert.strictEqual(name('https://c/playlist/7/load-playlist'), 'index.m3u8');
+  assert.strictEqual(name('https://c/playlist/7/load-playlist-multi'), 'index.m3u8');
 });
