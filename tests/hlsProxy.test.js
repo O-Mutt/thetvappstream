@@ -8,7 +8,7 @@ const SID = 'daddylive:51';
 
 test('proxyUri resolves relative segment URIs and routes them through /hlsseg', () => {
   const out = proxyUri('seg-1.ts', MANIFEST_URL, BASE, SID);
-  assert.match(out, /^https:\/\/proxy\.example\.com\/hlsseg\/daddylive%3A51\?u=/);
+  assert.match(out, /^https:\/\/proxy\.example\.com\/hlsseg\/daddylive%3A51\/seg\.ts\?u=/);
   const u = new URL(out);
   assert.strictEqual(
     decodeURIComponent(u.searchParams.get('u')),
@@ -141,7 +141,10 @@ test('segment rewrites a nested manifest served from an extensionless octet-stre
   );
   const out = await done;
   assert.match(out, /^#EXTM3U/);
-  assert.match(out, /\/hlsseg\/daddylive%3A51\?u=https%3A%2F%2Fcdn\.x%2Fplaylist%2F7%2Fseg-1\.ts/);
+  assert.match(
+    out,
+    /\/hlsseg\/daddylive%3A51\/seg\.ts\?u=https%3A%2F%2Fcdn\.x%2Fplaylist%2F7%2Fseg-1\.ts/,
+  );
 });
 
 test('segment streams binary payloads through untouched', async () => {
@@ -386,4 +389,15 @@ test('segment uses the "#sf=" primary when it answers', async () => {
   });
   assert.strictEqual((await fetchSegment(hls, SF_LINE)).body, 'tiktok');
   assert.deepStrictEqual(calls, [SF_PRIMARY]);
+});
+
+test('proxied urls end in a file name ffmpeg accepts', () => {
+  const name = u => new URL(proxyUri(u, MANIFEST_URL, BASE, SID)).pathname.split('/').pop();
+  assert.strictEqual(name('https://c/x/seg-1.ts'), 'seg.ts');
+  assert.strictEqual(name('https://c/playlist/7/seg-1.ts'), 'seg.ts');
+  assert.strictEqual(name('https://c/x/part.m4s'), 'seg.m4s');
+  assert.strictEqual(name('https://cdn1.strmfree.st/live/x/4401.js?_s=a'), 'seg.ts');
+  assert.strictEqual(name('https://p19.ttcdn-us.com/obj/abc#sf=x'), 'seg.ts');
+  assert.strictEqual(name('https://c/x/variant.m3u8?t=1'), 'index.m3u8');
+  assert.strictEqual(name('https://c/playlist/7/load-playlist'), 'index.m3u8');
 });

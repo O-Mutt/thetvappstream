@@ -98,6 +98,10 @@ module.exports = {
   // on a tune after roughly a minute, and browser-backed sources take 10-30s
   // each, so an unbounded walk ends in a timeout instead of a stream.
   RESOLVE_BUDGET_MS: parsePositiveInt(process.env.RESOLVE_BUDGET_MS, 45 * 1000),
+  // Serve each HLS channel as a playlist this server rebuilds on every reload,
+  // so a source that dies mid-game is replaced by the next ranked one. false
+  // restores the plain redirect / rewritten-master behavior.
+  PLAYBACK_FAILOVER: parseBool(process.env.PLAYBACK_FAILOVER, true),
   // Comma-separated sports and/or competitions to keep as event channels, e.g.
   // "american-football,basketball,MLS,EPL,Boxing,UFC". Unset keeps every event.
   // See EventFilter.js; what it drops is listed at /debug/dropped.

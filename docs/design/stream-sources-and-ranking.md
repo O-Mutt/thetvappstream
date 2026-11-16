@@ -478,6 +478,7 @@ Each step is a separate PR.
 3. ~~**PPV terms**~~ Decided 2026-11-16: PPV is shelved. Playback needs a
    browser disguised to get past bot detection, and its API says "contact
    us". See section 7.
-4. **Failover during playback:** once a proxied stream is playing, a source
-   that dies mid-game is only replaced when the player reloads the channel URL.
-   Switching sources inside `/hlsseg` is a separate piece of work.
+4. ~~**Failover during playback**~~ Addressed 2026-11-16 (#45): HLS
+   channels are served as a session playlist that switches to the next ranked
+   source when the current one fails, stalls or ends. See
+   [playback-failover.md](playback-failover.md).

@@ -8,9 +8,46 @@ const { unwrapPixelSegment } = require('./segmentUnwrap');
 
 // Resolve a possibly-relative URI against the manifest URL and route it through
 // the segment proxy, carrying the stream id so /hlsseg can look up headers.
+//
+// The path ends in a file name because ffmpeg (7.1.1 and later) refuses HLS
+// segment URLs without an allowed media extension ("is not in
+// allowed_segment_extensions"). The name only satisfies that check; /hlsseg
+// ignores it and fetches `u`.
 function proxyUri(uri, manifestUrl, base, streamId) {
   const abs = new URL(uri, manifestUrl).href;
-  return `${base}/hlsseg/${encodeURIComponent(streamId)}?u=${encodeURIComponent(abs)}`;
+  return `${base}/hlsseg/${encodeURIComponent(streamId)}/${proxyFileName(abs)}?u=${encodeURIComponent(abs)}`;
+}
+
+// Extensions ffmpeg accepts for segments; anything else (StreamFree's ".js",
+// TikTok's extensionless objects, pixel-packed ".png") is served as MPEG-TS.
+const SEGMENT_EXTS = new Set([
+  'ts',
+  'm2ts',
+  'mts',
+  'aac',
+  'ac3',
+  'ec3',
+  'mp3',
+  'm4s',
+  'mp4',
+  'm4a',
+  'm4v',
+  'vtt',
+  'webvtt',
+]);
+
+function proxyFileName(absUrl) {
+  let path = '';
+  try {
+    path = new URL(absUrl).pathname;
+  } catch {
+    // fall through to the default
+  }
+  const m = /\.([a-z0-9]{1,6})$/i.exec(path);
+  const ext = m ? m[1].toLowerCase() : '';
+  if (SEGMENT_EXTS.has(ext)) return `seg.${ext}`;
+  if (ext === 'm3u8' || ext === 'm3u' || /load-playlist$/i.test(path)) return 'index.m3u8';
+  return 'seg.ts';
 }
 
 // Apply `mapUri` to every URI in an m3u8 body. Variant playlists

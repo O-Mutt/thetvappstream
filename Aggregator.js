@@ -470,8 +470,6 @@ class Aggregator {
     return this.ranker.rank(sources, { providerOrder: this._providerOrder, costOf: this._costOf });
   }
 
-  // Ranked sources for one channel with the reasons behind the order, for
-  // /debug/sources. Null for an unknown id.
   // _dedupeEvents runs on every M3U fetch and EPG build, so only events not
   // already reported are logged.
   _recordDropped(dropped) {
@@ -498,6 +496,8 @@ class Aggregator {
     };
   }
 
+  // Ranked sources for one channel with the reasons behind the order, for
+  // /debug/sources. Null for an unknown id.
   explainSources(publicId) {
     const sources = this.streamIndex.get(publicId);
     if (!sources) return null;
@@ -516,6 +516,18 @@ class Aggregator {
   // Drop a cached resolution (e.g. after the upstream starts failing mid-play).
   invalidateStream(publicId) {
     this._resolved.delete(publicId);
+  }
+
+  // The source playing on `publicId` failed during playback: count it against
+  // that source and drop the cached resolution, so the next resolve walks the
+  // ranking again with the failed source last. Returns the failed source, or
+  // null when nothing was cached.
+  reportFailure(publicId, reason) {
+    const cached = this._resolved.get(publicId);
+    this._resolved.delete(publicId);
+    if (!cached || !cached.source) return null;
+    this.ranker.recordFailure(cached.source, reason);
+    return cached.source;
   }
 }
 
