@@ -1,8 +1,16 @@
 const express = require('express');
+const axios = require('axios');
 const { baseUrlFor } = require('./baseUrl');
-const { PORT, PUBLIC_BASE_URL, EVENT_REFRESH_MS, MIN_VIDEO_HEIGHT } = require('./config');
+const {
+  PORT,
+  PUBLIC_BASE_URL,
+  EVENT_REFRESH_MS,
+  MIN_VIDEO_HEIGHT,
+  PLAYBACK_FAILOVER,
+} = require('./config');
 const { createAggregator } = require('./providers');
-const { createHlsHandlers, probeStream } = require('./hlsProxy');
+const { createHlsHandlers, probeStream, proxyUri } = require('./hlsProxy');
+const PlaybackSessions = require('./PlaybackSessions');
 const { buildSplitLogo, renderEventArt } = require('./logoCompositor');
 
 const app = express();
@@ -20,6 +28,54 @@ const hls = createHlsHandlers({
   baseUrlFor: req => baseUrlFor(req, PUBLIC_BASE_URL),
   minHeight: MIN_VIDEO_HEIGHT,
 });
+
+const validate = s => probeStream(s.url, s.headers).catch(() => null);
+
+const sessions = new PlaybackSessions({
+  aggregator,
+  probe: (url, headers) => probeStream(url, headers),
+  fetchText: async (url, headers) => {
+    const r = await axios.get(url, {
+      headers: headers || {},
+      responseType: 'text',
+      transformResponse: x => x,
+      timeout: 10000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+    });
+    return {
+      status: r.status,
+      text: String(r.data ?? ''),
+      finalUrl: r.request?.res?.responseUrl || url,
+    };
+  },
+  proxyUri: (abs, base, id) => proxyUri(abs, abs, base, id),
+  setHeaders: (id, headers) => streamHeaders.set(id, headers),
+  minHeight: MIN_VIDEO_HEIGHT,
+});
+
+// Serve a resolved stream without a playback session: a redirect, a filtered
+// master, a rewritten manifest, or a relayed non-HLS body.
+async function serveResolved(req, res, { url, headers, check }) {
+  const needsHeaders = headers && Object.keys(headers).length > 0;
+  if (needsHeaders && check && check.kind === 'direct') {
+    // Header-locked non-HLS feed (continuous MPEG-TS): relay the body.
+    await hls.passthrough(req, res, { url, headers });
+  } else if (needsHeaders) {
+    // Header-locked stream: remux through the proxy so segments carry the
+    // required Referer/Origin (a redirect can't).
+    streamHeaders.set(req.params.id, headers);
+    await hls.serveManifest(req, res, {
+      streamId: req.params.id,
+      url,
+      headers,
+      base: baseUrlFor(req, PUBLIC_BASE_URL),
+      manifest: check && check.kind === 'hls' ? check : null,
+    });
+  } else if (!hls.serveFilteredMaster(res, { url, manifest: check })) {
+    res.redirect(url);
+  }
+}
 
 app.get('/channels.m3u', async (req, res) => {
   try {
@@ -42,30 +98,21 @@ app.get('/epg.xml', (_req, res) => {
 
 app.get('/channel/:id', async (req, res) => {
   try {
+    if (PLAYBACK_FAILOVER) {
+      const out = await sessions.serve(req.params.id, {
+        base: baseUrlFor(req, PUBLIC_BASE_URL),
+      });
+      if (out.kind === 'playlist') {
+        res.set('Cache-Control', 'no-cache').type('application/vnd.apple.mpegurl').send(out.text);
+        return;
+      }
+      await serveResolved(req, res, out.stream);
+      return;
+    }
     // Validate each candidate by probing it with the headers it needs, so a
     // source that resolves to a dead/empty stream falls through to the next
     // one. A fetched HLS manifest is reused below.
-    const { url, headers, check } = await aggregator.resolveStream(req.params.id, {
-      validate: s => probeStream(s.url, s.headers).catch(() => null),
-    });
-    const needsHeaders = headers && Object.keys(headers).length > 0;
-    if (needsHeaders && check && check.kind === 'direct') {
-      // Header-locked non-HLS feed (continuous MPEG-TS): relay the body.
-      await hls.passthrough(req, res, { url, headers });
-    } else if (needsHeaders) {
-      // Header-locked stream: remux through the proxy so segments carry the
-      // required Referer/Origin (a redirect can't).
-      streamHeaders.set(req.params.id, headers);
-      await hls.serveManifest(req, res, {
-        streamId: req.params.id,
-        url,
-        headers,
-        base: baseUrlFor(req, PUBLIC_BASE_URL),
-        manifest: check && check.kind === 'hls' ? check : null,
-      });
-    } else if (!hls.serveFilteredMaster(res, { url, manifest: check })) {
-      res.redirect(url);
-    }
+    await serveResolved(req, res, await aggregator.resolveStream(req.params.id, { validate }));
   } catch (e) {
     console.error(`/channel/${req.params.id}: ${e.message}`);
     res.status(404).send('Channel does not exist, or is blocked.');
@@ -77,7 +124,7 @@ app.get('/channel/:id', async (req, res) => {
 app.get('/debug/sources/:id', (req, res) => {
   const info = aggregator.explainSources(req.params.id);
   if (!info) return res.status(404).json({ error: 'unknown channel id' });
-  res.json(info);
+  res.json({ ...info, session: sessions.describe(req.params.id) });
 });
 
 // Events EVENT_FILTER removed on the last listing pass, with the labels the
@@ -86,7 +133,9 @@ app.get('/debug/dropped', (_req, res) => {
   res.json(aggregator.listDropped());
 });
 
-app.get('/hlsseg/:streamId', (req, res) => {
+// The trailing file name exists only for ffmpeg's segment-extension check
+// (see proxyUri); the bare form serves URLs from manifests issued earlier.
+app.get(['/hlsseg/:streamId', '/hlsseg/:streamId/:file'], (req, res) => {
   hls.segment(req, res).catch(e => {
     console.error(`/hlsseg/${req.params.streamId}: ${e.message}`);
     if (!res.headersSent) res.status(502).end();
