@@ -20,8 +20,9 @@ channel as automatic fallbacks.
 - **Events:** `Aggregator._dedupeEvents` (`Aggregator.js:93`) already merges a
   game into one channel across providers, keeping the other providers as
   ordered `sources`.
-- **Linear channels:** namespaced per provider (`Aggregator.js:179`,
-  `${provider}:${ref}`). The same network from two providers gives two channels.
+- **Linear channels:** before step 4, namespaced per provider
+  (`${provider}:${ref}`), so the same network from two providers gave two
+  channels.
 - **Source order:** provider order in `PROVIDERS`, then each provider's own
   order. Quality and recent failures are ignored.
 - **Tune:** `_resolveStream` (`Aggregator.js:315`) tries sources in order. Each
@@ -109,20 +110,45 @@ The floor is `MIN_VIDEO_HEIGHT` (default 720).
 - The highest `RESOLUTION` seen is recorded as the source's `lastHeight` for
   ranking.
 
-### 4. Linear channel dedupe (`Aggregator.listM3uEntries`)
+### 4. Linear channel dedupe (`networkKey.js`, `Aggregator._linearChannels`)
 
-- **Merging:** each linear channel name is normalized to a network key:
-  lowercase; emoji and punctuation removed; trailing `hd`, `fhd`, `uhd`, `4k`,
-  `usa`, `us` and bracketed text removed. A small alias table covers known
-  spellings, for example `nfl network`, `nfl net` and `nflnetwork` map to
-  `nfl-network`. Channels with the same key become one entry whose `sources`
-  are ranked as in section 2.
-- **Channel id:** `live:<network key>`. This changes the `tvg-id` of every
-  linear channel. See Open questions.
-- **Name and logo:** the display name, logo and EPG come from the
-  highest-priority provider that has a guide for the channel.
-- **Plain M3U sources:** channels from `M3U_SOURCES` are merged by the same
-  key.
+- **Network key** (`networkKey(name)`):
+  1. Lowercase, strip accents and emoji, turn `+` into `plus` and other
+     punctuation into spaces.
+  2. Split digits off a name of three or more letters, so `ESPN2` and
+     `ESPN 2` agree. Shorter prefixes stay joined (`F1`, `FS1`).
+  3. Drop trailing decoration: `hd`, `fhd`, `uhd`, `4k`, `sd`, `hevc`, any
+     `720p`-style height, `us`, `usa`. Drop a leading `us`/`usa` market
+     prefix (`US: ESPN`). US is this app's audience, so a bare name is the US
+     feed; other markets keep their suffix (`ESPN 2 NL`, `TNT Sports 1 UK`).
+  4. Sky Sports is a UK brand that appears both with and without `UK`, so a
+     trailing `uk` is dropped for `sky sports ...` only. `Sky Sports F1 DE`
+     stays separate.
+  5. An alias table joins known spellings: `nfl net` and `nflnetwork` to
+     `nfl network`; `redzone` to `nfl redzone`; `fs1` to `fox sports 1`;
+     `cbssn` to `cbs sports network`; `willow cricket` to `willow`.
+  6. Words are joined with `-`.
+
+  Bracketed text is kept as words, not removed, because it often names the
+  feed: dlhd lists twenty `18+ (Player-NN)` channels that removing it would
+  merge into one. On dlhd's 899 channels plus StreamFree's five, the only
+  merges were the intended ones: RedZone, Sky Sports Tennis, Sky Sports F1,
+  Sky Sports Cricket and Willow.
+
+- **Merging:** channels with the same key become one entry whose `sources`
+  are in `PROVIDERS` order and ranked at tune time as in section 2. This
+  includes `M3U_SOURCES` channels and duplicates within one provider (an
+  IPTV list's `News One (720p)` and `News One SD`).
+- **Channel id:** `live:<network key>`, for example `live:espn`. This changed
+  the `tvg-id` of every linear channel; see `docs/upgrading.md`. A name that
+  is all decoration falls back to a key built from the provider and ref.
+- **Name, group and logo:** name and group come from the first provider in
+  `PROVIDERS` order that lists the network; the logo from the first that has
+  one. A stable name keeps Plex and Dispatcharr from seeing renames.
+- **Guide:** one `<channel>` per merged channel. Programmes come from the
+  first source, in source order, whose provider has programmes for it, so a
+  guide-less copy (dlhd) never blanks a copy with a guide. Provider guide
+  rows for channels the provider no longer lists are not emitted.
 
 ### 5. Event allowlist (`EventFilter.js`, `sports.js`)
 

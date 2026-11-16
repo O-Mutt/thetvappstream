@@ -121,7 +121,7 @@ function normalizeLabel(s) {
   const t = String(s ?? '')
     .toLowerCase()
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}/gu, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
   return t ? ` ${t} ` : '';

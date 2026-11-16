@@ -54,7 +54,7 @@ test('getM3u emits linear + event rows with provider-scoped stream urls', async 
 
   assert.match(m3u, /^#EXTM3U/);
   assert.match(m3u, /group-title="Live TV", CNN/);
-  assert.match(m3u, /https:\/\/proxy\.example\.com\/channel\/thetvapp%3A101/);
+  assert.match(m3u, /https:\/\/proxy\.example\.com\/channel\/live%3Acnn/);
   assert.match(m3u, /group-title="MLB", Minnesota Twins vs Boston Red Sox @ May 22 7:10 PM/);
 });
 
@@ -62,7 +62,7 @@ test('linear stream ids resolve back to the owning provider', async () => {
   const p = new FakeProvider('thetvapp', { linear: { CNN: '101' } });
   const agg = new Aggregator([p]);
   await agg.listM3uEntries();
-  const { url } = await agg.resolveStream('thetvapp:101');
+  const { url } = await agg.resolveStream('live:cnn');
   assert.strictEqual(url, 'http://stream/thetvapp/101');
 });
 
@@ -109,6 +109,7 @@ test('resolveStream throws for an unknown id', async () => {
 
 test('refreshEpg merges linear guides and synthesizes event programmes', async () => {
   const p = new FakeProvider('thetvapp', {
+    linear: { CNN: '101' },
     events: [gameEvent('Twins vs Red Sox @ May 22 7:10 PM', 'slot9')],
     epg: {
       items: [{ name: 'CNN', chid: '101', logo: null }],
@@ -119,8 +120,8 @@ test('refreshEpg merges linear guides and synthesizes event programmes', async (
   await agg.refreshEpg();
   const xml = agg.getEpgXml();
 
-  // linear guide id is namespaced to match the M3U tvg-id
-  assert.match(xml, /<channel id="thetvapp:101"><display-name>CNN<\/display-name>/);
+  // linear guide id is the network id the M3U emits as tvg-id
+  assert.match(xml, /<channel id="live:cnn"><display-name>CNN<\/display-name>/);
   assert.match(xml, /<title>News<\/title>/);
   // event folded in under its canonical id with "<league>: <matchup>" title.
   // The "@ <time>" suffix is dropped here (Plex renders the slot itself) but
@@ -140,7 +141,7 @@ test('linear EPG channel id matches the linear M3U tvg-id (Plex pairing)', async
   const m3u = await agg.getM3u('https://x');
   await agg.refreshEpg();
   const tvgId = /tvg-id="([^"]+)"/.exec(m3u)[1];
-  assert.strictEqual(tvgId, 'thetvapp:101');
+  assert.strictEqual(tvgId, 'live:cnn');
   assert.match(agg.getEpgXml(), new RegExp(`<channel id="${tvgId}">`));
 });
 
@@ -376,13 +377,13 @@ test('a validated stream is cached and re-validated instead of re-resolved', asy
   let healthy = true;
   const validate = () => (healthy ? { ok: true } : null);
 
-  await agg.resolveStream('thetvapp:101', { validate });
-  await agg.resolveStream('thetvapp:101', { validate });
+  await agg.resolveStream('live:cnn', { validate });
+  await agg.resolveStream('live:cnn', { validate });
   assert.deepStrictEqual(p.resolved, ['101'], 'second request served from cache');
 
   // Cached URL goes bad -> one fresh resolve.
   healthy = false;
-  await assert.rejects(() => agg.resolveStream('thetvapp:101', { validate }));
+  await assert.rejects(() => agg.resolveStream('live:cnn', { validate }));
   assert.deepStrictEqual(p.resolved, ['101', '101']);
 });
 
@@ -396,14 +397,14 @@ test('a stream that keeps validating outlives the cache TTL', async () => {
   // Playlist reloads every 20ms for 3x the TTL: each one re-validates and
   // extends the entry, so the provider is never asked again mid-play.
   for (let i = 0; i < 8; i++) {
-    await agg.resolveStream('thetvapp:101', { validate });
+    await agg.resolveStream('live:cnn', { validate });
     await new Promise(r => setTimeout(r, 20));
   }
   assert.deepStrictEqual(p.resolved, ['101']);
 
   // Left idle past the TTL, the next request resolves fresh.
   await new Promise(r => setTimeout(r, 80));
-  await agg.resolveStream('thetvapp:101', { validate });
+  await agg.resolveStream('live:cnn', { validate });
   assert.deepStrictEqual(p.resolved, ['101', '101']);
 });
 
@@ -418,12 +419,12 @@ test('concurrent requests for one channel share a single resolve', async () => {
   agg.streamCacheMs = 0;
   await agg.listM3uEntries();
 
-  const out = await Promise.all([1, 2, 3].map(() => agg.resolveStream('thetvapp:101')));
+  const out = await Promise.all([1, 2, 3].map(() => agg.resolveStream('live:cnn')));
   assert.deepStrictEqual(p.resolved, ['101']);
   assert.ok(out.every(o => o.url === 'http://stream/thetvapp/101'));
 
   // Once it settles, the next request isn't handed the old promise.
-  await agg.resolveStream('thetvapp:101');
+  await agg.resolveStream('live:cnn');
   assert.deepStrictEqual(p.resolved, ['101', '101']);
 });
 
@@ -486,8 +487,8 @@ test('the height measured while validating is recorded for ranking', async () =>
   const p = new FakeProvider('thetvapp', { linear: { CNN: '101' } });
   const agg = new Aggregator([p]);
   await agg.listM3uEntries();
-  await agg.resolveStream('thetvapp:101', { validate: () => ({ kind: 'hls', height: 1080 }) });
-  const info = agg.explainSources('thetvapp:101');
+  await agg.resolveStream('live:cnn', { validate: () => ({ kind: 'hls', height: 1080 }) });
+  const info = agg.explainSources('live:cnn');
   assert.strictEqual(info.playing, 'thetvapp:101');
   assert.strictEqual(info.sources[0].height, 1080);
   assert.strictEqual(info.sources[0].quality, 'fhd');
@@ -499,10 +500,10 @@ test('a cached stream that stops validating marks its source as failed', async (
   await agg.listM3uEntries();
   let healthy = true;
   const validate = () => (healthy ? { ok: true } : null);
-  await agg.resolveStream('thetvapp:101', { validate });
+  await agg.resolveStream('live:cnn', { validate });
   healthy = false;
-  await assert.rejects(() => agg.resolveStream('thetvapp:101', { validate }));
-  assert.ok(agg.explainSources('thetvapp:101').sources[0].consecutiveFailures >= 1);
+  await assert.rejects(() => agg.resolveStream('live:cnn', { validate }));
+  assert.ok(agg.explainSources('live:cnn').sources[0].consecutiveFailures >= 1);
 });
 
 test('the resolve budget stops a slow source and later sources are not blamed', async () => {
@@ -536,6 +537,49 @@ test('a first source that hangs through the whole budget is blamed', async () =>
   const agg = new Aggregator([p]);
   agg.resolveBudgetMs = 30;
   await agg.listM3uEntries();
-  await assert.rejects(() => agg.resolveStream('thetvapp:101'), /timed out/);
-  assert.strictEqual(agg.explainSources('thetvapp:101').sources[0].consecutiveFailures, 1);
+  await assert.rejects(() => agg.resolveStream('live:cnn'), /timed out/);
+  assert.strictEqual(agg.explainSources('live:cnn').sources[0].consecutiveFailures, 1);
+});
+
+test('the same network from two providers is one linear channel with both as sources', async () => {
+  const dl = new FakeProvider('daddylive', {
+    linear: { 'ESPN USA': '44', 'NFL RedZone': '667' },
+    failRefs: ['44'],
+    epg: { items: [{ name: 'ESPN USA', chid: '44', logo: null }], programmesByChid: {} },
+  });
+  const m3u = new FakeProvider('iptv', {
+    linear: [{ name: 'ESPN HD', ref: 'espn-hd', logo: 'https://l/espn.png', group: 'Sports' }],
+    epg: {
+      items: [{ name: 'ESPN HD', chid: 'espn-hd', logo: null }],
+      programmesByChid: { 'espn-hd': [{ title: 'SportsCenter', startTime: START, endTime: END }] },
+    },
+  });
+  const sf = new FakeProvider('streamfree', {
+    linear: [{ name: 'RedZone', ref: 'k:football/redzone' }],
+  });
+  const agg = new Aggregator([dl, m3u, sf]);
+
+  const { linearEntries } = await agg.listM3uEntries();
+  assert.deepStrictEqual(
+    linearEntries.map(e => [e.tvgId, e.name, e.group, e.logo]),
+    [
+      // Name and group from the first provider listing it; logo from the first that has one.
+      ['live:espn', 'ESPN USA', 'Live TV', 'https://l/espn.png'],
+      ['live:nfl-redzone', 'NFL RedZone', 'Live TV', ''],
+    ],
+  );
+  assert.deepStrictEqual(agg.streamIndex.get('live:nfl-redzone'), [
+    { providerName: 'daddylive', ref: '667' },
+    { providerName: 'streamfree', ref: 'k:football/redzone' },
+  ]);
+
+  // dlhd's ESPN fails, so the tune falls through to the IPTV copy.
+  const { url } = await agg.resolveStream('live:espn');
+  assert.strictEqual(url, 'http://stream/iptv/espn-hd');
+
+  // The guide comes from the source that has one, even though it is listed second.
+  await agg.refreshEpg();
+  const xml = agg.getEpgXml();
+  assert.strictEqual((xml.match(/<channel id="live:espn">/g) || []).length, 1);
+  assert.match(xml, /<programme[^>]*channel="live:espn"[^>]*>\s*<title[^>]*>SportsCenter/);
 });

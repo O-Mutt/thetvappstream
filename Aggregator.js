@@ -7,6 +7,7 @@ const { PUBLIC_BASE_URL, STREAM_CACHE_MS, RESOLVE_BUDGET_MS, EVENT_FILTER } = re
 const { SourceRanker, sourceKey } = require('./SourceRanker');
 const { createEventFilter } = require('./EventFilter');
 const { inferSport } = require('./sports');
+const { networkKey } = require('./networkKey');
 
 // streamRef / altStreamRefs entries are a bare ref or { ref, quality }.
 function normalizeRef(r) {
@@ -68,7 +69,8 @@ function normalizeLinear(channels) {
 }
 
 // Fans the M3U/EPG/stream surface out across N providers:
-//   - linear channels are namespaced per provider (id `${provider}:${ref}`)
+//   - linear channels are merged by network (id `live:<networkKey>`), each
+//     provider's copy becoming one ranked source of the merged channel
 //   - events are deduped by cross-provider canonical identity, keeping an
 //     ordered source list so a dead link at record time falls through to the
 //     next provider
@@ -205,6 +207,42 @@ class Aggregator {
     );
   }
 
+  // Every provider's linear channels, merged by network. Name and group come
+  // from the first provider in PROVIDERS order that lists the network, the
+  // logo from the first that has one; sources keep that order, and ranking
+  // reorders them at tune time.
+  async _linearChannels(logoByName = new Map()) {
+    const byKey = new Map();
+    for (const p of this.providers) {
+      let channels = {};
+      try {
+        channels = await p.listLinearChannels();
+      } catch (e) {
+        console.error(`[${p.name}] listLinearChannels: ${e.message}`);
+      }
+      for (const ch of normalizeLinear(channels)) {
+        // A name that is all decoration ("HD") still needs a stable id.
+        const key = networkKey(ch.name) || networkKey(`${p.name} ${ch.ref}`);
+        let entry = byKey.get(key);
+        if (!entry) {
+          entry = {
+            id: `live:${key}`,
+            name: ch.name,
+            group: ch.group || 'Live TV',
+            logo: '',
+            sources: [],
+          };
+          byKey.set(key, entry);
+        }
+        if (!entry.logo) entry.logo = ch.logo || logoByName.get(ch.name) || '';
+        if (!entry.sources.some(s => s.providerName === p.name && s.ref === ch.ref)) {
+          entry.sources.push({ providerName: p.name, ref: ch.ref });
+        }
+      }
+    }
+    return [...byKey.values()];
+  }
+
   // Build merged M3U rows and (re)populate the stream index that resolveStream
   // reads. Returns { linearEntries, eventEntries } for formatting/tests.
   async listM3uEntries(base = '') {
@@ -214,26 +252,10 @@ class Aggregator {
       (logos.channels || []).filter(c => c?.name && c?.logo).map(c => [c.name, c.logo]),
     );
 
-    const linearEntries = [];
-    for (const p of this.providers) {
-      let channels = {};
-      try {
-        channels = await p.listLinearChannels();
-      } catch (e) {
-        console.error(`[${p.name}] listLinearChannels: ${e.message}`);
-      }
-      for (const ch of normalizeLinear(channels)) {
-        const streamId = `${p.name}:${ch.ref}`;
-        index.set(streamId, [{ providerName: p.name, ref: ch.ref }]);
-        linearEntries.push({
-          tvgId: streamId,
-          name: ch.name,
-          group: ch.group || 'Live TV',
-          logo: ch.logo || logoByName.get(ch.name) || '',
-          streamId,
-        });
-      }
-    }
+    const linearEntries = (await this._linearChannels(logoByName)).map(ch => {
+      index.set(ch.id, ch.sources);
+      return { tvgId: ch.id, name: ch.name, group: ch.group, logo: ch.logo, streamId: ch.id };
+    });
 
     const eventEntries = (await this._dedupeEvents()).map(ev => {
       // Every event gets rendered art when we know our public base URL — the
@@ -274,6 +296,10 @@ class Aggregator {
       const allItems = [];
       const allProgrammes = {};
 
+      // Provider guides keyed by `${provider}:${chid}`. Every provider uses
+      // its stream ref as its guide chid, so these line up with sources.
+      const guideItems = new Map();
+      const guideProgrammes = new Map();
       for (const p of this.providers) {
         let data = { items: [], programmesByChid: {} };
         try {
@@ -281,14 +307,25 @@ class Aggregator {
         } catch (e) {
           console.error(`[${p.name}] getEpgData: ${e.message}`);
         }
-        // Namespace linear guide ids to match the `${provider}:${ref}` tvg-ids
-        // listM3uEntries emits, so Plex pairs each channel with its guide.
-        for (const it of data.items || []) {
-          allItems.push({ ...it, chid: `${p.name}:${it.chid}` });
-        }
+        for (const it of data.items || []) guideItems.set(`${p.name}:${it.chid}`, it);
         for (const [chid, progs] of Object.entries(data.programmesByChid || {})) {
-          allProgrammes[`${p.name}:${chid}`] = progs;
+          if (Array.isArray(progs) && progs.length) guideProgrammes.set(`${p.name}:${chid}`, progs);
         }
+      }
+
+      // One guide row per merged linear channel, under the same live: id the
+      // M3U emits. Programmes come from the first source that has any, so a
+      // guide-less copy of a network never blanks one that has a guide.
+      for (const ch of await this._linearChannels()) {
+        const keys = ch.sources.map(s => `${s.providerName}:${s.ref}`);
+        const withGuide = keys.find(k => guideProgrammes.has(k));
+        const item = guideItems.get(withGuide || keys[0]);
+        allItems.push({
+          name: ch.name,
+          chid: ch.id,
+          logo: ch.logo || (item && item.logo) || null,
+        });
+        if (withGuide) allProgrammes[ch.id] = guideProgrammes.get(withGuide);
       }
 
       // Synthesize one programme per deduped event, keyed to the same id the
