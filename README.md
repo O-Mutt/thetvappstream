@@ -10,11 +10,12 @@ adapter — the M3U/EPG assembly, mirror failover, and stream proxy are shared.
 
 ## Providers
 
-| Provider    | Channels | Events        | Stream resolution                         |
-| ----------- | -------- | ------------- | ----------------------------------------- |
-| `thetvapp`  | no       | yes           | Referer-locked HLS via the proxy          |
-| `daddylive` | yes      | best-effort\* | headless solver + Referer-injecting remux |
-| M3U sources | yes      | no            | as listed; header-locked ones proxied     |
+| Provider     | Channels | Events        | Stream resolution                         |
+| ------------ | -------- | ------------- | ----------------------------------------- |
+| `thetvapp`   | no       | yes           | Referer-locked HLS via the proxy          |
+| `daddylive`  | yes      | best-effort\* | headless solver + Referer-injecting remux |
+| `streamfree` | yes      | yes           | tokenized HLS via the proxy               |
+| M3U sources  | yes      | no            | as listed; header-locked ones proxied     |
 
 Enable providers (in order — first wins same-game event fallback) via the
 `PROVIDERS` env var, e.g. `PROVIDERS=thetvapp,daddylive`. Generic M3U + XMLTV
@@ -106,18 +107,20 @@ ended, so in-progress channels stay in the M3U until the next refresh.
 
 ## Configuration (env vars)
 
-| Var                    | Default                                            | Notes                                                                                                                              |
-| ---------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                 | `5000`                                             | HTTP port the server binds to.                                                                                                     |
-| `PROVIDERS`            | `thetvapp`                                         | Comma-separated, ordered list of enabled providers (`thetvapp`, `daddylive`). `none` disables them all (M3U sources only).         |
-| `PUBLIC_BASE_URL`      | _(unset)_                                          | Base URL emitted in the M3U. When unset, derived from request `Host`/`X-Forwarded-*`. Strongly recommended behind a reverse proxy. |
-| `THETVAPP_URLS`        | `https://the-tv.app,https://thetvapp.link`         | Ordered, comma-separated mirror list for thetvapp (first = preferred). See _Mirror failover_. `TV_URL` is not used.                |
-| `ENABLE_EVENT_STREAMS` | `true`                                             | thetvapp: scrape per-sport event pages and merge into the M3U + EPG.                                                               |
-| `EVENT_REFRESH_MS`     | `1800000` (30 min)                                 | How often to re-scrape event listings.                                                                                             |
-| `DLHD_URLS`            | `https://dlive.sx,https://dlhd.st,https://dlhd.pk` | Ordered, comma-separated mirror list for DaddyLive (first = preferred). `dlhd.pk` redirects to `dlhd.st`, then `dlive.sx`.         |
-| `DLHD_ENABLE_EVENTS`   | `true`                                             | DaddyLive: surface (best-effort) schedule events. Set `false` for channels only.                                                   |
-| `M3U_SOURCES`          | _(unset)_                                          | Generic M3U + XMLTV feeds, one provider each: `name=<m3u url>\|<xmltv url>;name2=...` or a JSON array. See below.                  |
-| `STREAM_CACHE_MS`      | `600000` (10 min)                                  | Reuse a validated stream URL per channel for this long (re-checked on every use). `0` disables.                                    |
+| Var                        | Default                                                          | Notes                                                                                                                                    |
+| -------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                     | `5000`                                                           | HTTP port the server binds to.                                                                                                           |
+| `PROVIDERS`                | `thetvapp,streamfree`                                            | Comma-separated, ordered list of enabled providers (`thetvapp`, `daddylive`, `streamfree`). `none` disables them all (M3U sources only). |
+| `PUBLIC_BASE_URL`          | _(unset)_                                                        | Base URL emitted in the M3U. When unset, derived from request `Host`/`X-Forwarded-*`. Strongly recommended behind a reverse proxy.       |
+| `THETVAPP_URLS`            | `https://the-tv.app,https://thetvapp.link`                       | Ordered, comma-separated mirror list for thetvapp (first = preferred). See _Mirror failover_. `TV_URL` is not used.                      |
+| `ENABLE_EVENT_STREAMS`     | `true`                                                           | thetvapp: scrape per-sport event pages and merge into the M3U + EPG.                                                                     |
+| `EVENT_REFRESH_MS`         | `1800000` (30 min)                                               | How often to re-scrape event listings.                                                                                                   |
+| `DLHD_URLS`                | `https://dlive.sx,https://dlhd.st,https://dlhd.pk`               | Ordered, comma-separated mirror list for DaddyLive (first = preferred). `dlhd.pk` redirects to `dlhd.st`, then `dlive.sx`.               |
+| `DLHD_ENABLE_EVENTS`       | `true`                                                           | DaddyLive: surface (best-effort) schedule events. Set `false` for channels only.                                                         |
+| `STREAMFREE_URLS`          | `https://strmfree.st,https://strmfree.pk,https://streamfree.top` | StreamFree mirrors, used when its mirror directory (`strmfree.link`) is unreachable.                                                     |
+| `STREAMFREE_ENABLE_LINEAR` | `true`                                                           | StreamFree: list its 24/7 channels (RedZone, Sky Sports Tennis/Cricket/F1, Willow). Set `false` for games only.                          |
+| `M3U_SOURCES`              | _(unset)_                                                        | Generic M3U + XMLTV feeds, one provider each: `name=<m3u url>\|<xmltv url>;name2=...` or a JSON array. See below.                        |
+| `STREAM_CACHE_MS`          | `600000` (10 min)                                                | Reuse a validated stream URL per channel for this long (re-checked on every use). `0` disables.                                          |
 
 ## Running with Docker
 
