@@ -447,6 +447,474 @@
       {
         "name": "WNYW (New York) FOX East",
         "logo": "https://static.wikia.nocookie.net/logopedia/images/2/2a/Fts-new-york-a.svg/revision/latest/scale-to-width-down/1000?cb=20200922055037"
+      },
+      {
+        "name": "ABC USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/abc-us.png"
+      },
+      {
+        "name": "ACC Network USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/acc-network-us.png"
+      },
+      {
+        "name": "Adult Swim",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/adult-swim-us.png"
+      },
+      {
+        "name": "AXS TV USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/axs-tv-us.png"
+      },
+      {
+        "name": "Altitude Sports",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/altitude-sports-us.png"
+      },
+      {
+        "name": "BeIN SPORTS USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/bein-sports-us.png"
+      },
+      {
+        "name": "BBC One UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/bbc-one-uk.png"
+      },
+      {
+        "name": "BBC Two UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/bbc-two-uk.png"
+      },
+      {
+        "name": "BBC Three UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/bbc-three-uk.png"
+      },
+      {
+        "name": "BBC Four UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/bbc-four-uk.png"
+      },
+      {
+        "name": "Court TV USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/court-tv-us.png"
+      },
+      {
+        "name": "CW USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/cw-us.png"
+      },
+      {
+        "name": "Channel 4 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/channel-4-uk.png"
+      },
+      {
+        "name": "Channel 5 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/channel-5-uk.png"
+      },
+      {
+        "name": "COZI TV USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/cozi-tv-us.png"
+      },
+      {
+        "name": "Comet USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/comet-us.png"
+      },
+      {
+        "name": "Cleo TV",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/cleo-tv-us.png"
+      },
+      {
+        "name": "C SPAN 1",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/c-span-1-us.png"
+      },
+      {
+        "name": "Disney Channel",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/disney-channel-us.png"
+      },
+      {
+        "name": "Discovery Channel",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/discovery-channel-us.png"
+      },
+      {
+        "name": "Discovery Family",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/discovery-family-us.png"
+      },
+      {
+        "name": "Disney JR",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/disney-jr-us.png"
+      },
+      {
+        "name": "ESPN Deportes",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/espn-deportes-us.png"
+      },
+      {
+        "name": "FOX Soccer Plus",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fox-soccer-plus-us.png"
+      },
+      {
+        "name": "Fight Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fight-network-us.png"
+      },
+      {
+        "name": "Fox Business",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fox-business-us.png"
+      },
+      {
+        "name": "FOX USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fox-us.png"
+      },
+      {
+        "name": "Fox News",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/fox-news-us.png"
+      },
+      {
+        "name": "Film4 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/film-4-uk.png"
+      },
+      {
+        "name": "Game Show Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/game-show-network-us.png"
+      },
+      {
+        "name": "Gold UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/gold-uk.png"
+      },
+      {
+        "name": "HBO USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/hbo-us.png"
+      },
+      {
+        "name": "HBO Family USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/hbo-family-us.png"
+      },
+      {
+        "name": "HBO Latino USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/hbo-latino-us.png"
+      },
+      {
+        "name": "ITV 1 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/itv-1-uk.png"
+      },
+      {
+        "name": "ITV 2 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/itv-2-uk.png"
+      },
+      {
+        "name": "ITV 3 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/itv-3-uk.png"
+      },
+      {
+        "name": "ITV 4 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/itv-4-uk.png"
+      },
+      {
+        "name": "MSG USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/msg-us.png"
+      },
+      {
+        "name": "Magnolia Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/magnolia-network-us.png"
+      },
+      {
+        "name": "MTV UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/mtv-uk.png"
+      },
+      {
+        "name": "MUTV UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/mutv-uk.png"
+      },
+      {
+        "name": "Marquee Sports Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/marquee-sports-network-us.png"
+      },
+      {
+        "name": "MASN USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/masn-us.png"
+      },
+      {
+        "name": "Discovery Turbo",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/discovery-turbo-us.png"
+      },
+      {
+        "name": "Monumental Sports Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/monumental-sports-network-us.png"
+      },
+      {
+        "name": "Nick Music",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nick-music-us.png"
+      },
+      {
+        "name": "NESN USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nesn-us.png"
+      },
+      {
+        "name": "NBC USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nbc-us.png"
+      },
+      {
+        "name": "NICK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nick-us.png"
+      },
+      {
+        "name": "NBC Universo",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nbc-universo-us.png"
+      },
+      {
+        "name": "Paramount Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/paramount-network-us.png"
+      },
+      {
+        "name": "Pac-12 Network USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/pac-12-network-us.png"
+      },
+      {
+        "name": "PBS USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/pbs-us.png"
+      },
+      {
+        "name": "Racing Tv UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/racing-tv-uk.png"
+      },
+      {
+        "name": "Sky Sports Football UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-football-uk.png"
+      },
+      {
+        "name": "Sky Sports Action UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-action-uk.png"
+      },
+      {
+        "name": "Sky Sports Main Event",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-main-event-uk.png"
+      },
+      {
+        "name": "Sky Sports Tennis UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-tennis-uk.png"
+      },
+      {
+        "name": "Sky sports Premier League",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-premier-league-uk.png"
+      },
+      {
+        "name": "Sky Sports F1 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-f1-uk.png"
+      },
+      {
+        "name": "Sky Sports Cricket",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-cricket-uk.png"
+      },
+      {
+        "name": "Sky Sports Golf UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-golf-uk.png"
+      },
+      {
+        "name": "Sky Sports News UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-news-uk.png"
+      },
+      {
+        "name": "Sky Sports MIX UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-mix-uk.png"
+      },
+      {
+        "name": "Sky Sports Racing UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-sports-racing-uk.png"
+      },
+      {
+        "name": "Starz Cinema",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-cinema-us.png"
+      },
+      {
+        "name": "Starz Comedy",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-comedy-us.png"
+      },
+      {
+        "name": "Starz Edge",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-edge-us.png"
+      },
+      {
+        "name": "Starz In Black",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-in-black-us.png"
+      },
+      {
+        "name": "Starz Encore",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-us.png"
+      },
+      {
+        "name": "Starz Encore Action",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-action-us.png"
+      },
+      {
+        "name": "Starz Encore Black",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-black-us.png"
+      },
+      {
+        "name": "Starz Encore Classic",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-classic-us.png"
+      },
+      {
+        "name": "Starz Encore Family",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-family-us.png"
+      },
+      {
+        "name": "Starz Encore Suspense",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-suspense-us.png"
+      },
+      {
+        "name": "Starz Encore Westerns",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-encore-westerns-us.png"
+      },
+      {
+        "name": "Spectrum SportsNet USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/spectrum-sportsnet-us.png"
+      },
+      {
+        "name": "SEC Network USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/sec-network-us.png"
+      },
+      {
+        "name": "Spectrum Sportsnet LA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/spectrum-sportsnet-la-us.png"
+      },
+      {
+        "name": "S4C UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/s4c-uk.png"
+      },
+      {
+        "name": "Sky Cinema Premiere UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-premiere-uk.png"
+      },
+      {
+        "name": "Sky Cinema Select UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-select-uk.png"
+      },
+      {
+        "name": "Sky Cinema Hits UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-hits-uk.png"
+      },
+      {
+        "name": "Sky Cinema Greats UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-greats-uk.png"
+      },
+      {
+        "name": "Sky Cinema Animation UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-animation-uk.png"
+      },
+      {
+        "name": "Sky Cinema Family UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-family-uk.png"
+      },
+      {
+        "name": "Sky Cinema Action UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-action-uk.png"
+      },
+      {
+        "name": "Sky Cinema Comedy UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-comedy-uk.png"
+      },
+      {
+        "name": "Sky Cinema Thriller UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-thriller-uk.png"
+      },
+      {
+        "name": "Sky Cinema Drama UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-cinema-drama-uk.png"
+      },
+      {
+        "name": "Sky NEWS UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-news-uk.png"
+      },
+      {
+        "name": "Sky Showcase UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-showcase-uk.png"
+      },
+      {
+        "name": "Sky Arts UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-arts-uk.png"
+      },
+      {
+        "name": "Sky Comedy UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-comedy-uk.png"
+      },
+      {
+        "name": "Sky MAX UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/sky-max-uk.png"
+      },
+      {
+        "name": "Showtime USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/showtime-us.png"
+      },
+      {
+        "name": "Starz",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/starz-us.png"
+      },
+      {
+        "name": "Sundance TV",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/sundance-tv-us.png"
+      },
+      {
+        "name": "Smithsonian Channel",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/smithsonian-channel-us.png"
+      },
+      {
+        "name": "Showtime Showcase USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/showtime-showcase-us.png"
+      },
+      {
+        "name": "Showtime Extreme USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/showtime-extreme-us.png"
+      },
+      {
+        "name": "Showtime Women USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/showtime-women-us.png"
+      },
+      {
+        "name": "Space City Home Network",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/space-city-home-network-us.png"
+      },
+      {
+        "name": "SportsNet Pittsburgh",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/sportsnet-pittsburgh-us.png"
+      },
+      {
+        "name": "TNT Sports 1 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/tnt-sports-1-uk.png"
+      },
+      {
+        "name": "TNT Sports 2 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/tnt-sports-2-uk.png"
+      },
+      {
+        "name": "TNT Sports 3 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/tnt-sports-3-uk.png"
+      },
+      {
+        "name": "TNT Sports 4 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/tnt-sports-4-uk.png"
+      },
+      {
+        "name": "TUDN USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/tudn-us.png"
+      },
+      {
+        "name": "Telemundo",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/telemundo-us.png"
+      },
+      {
+        "name": "Univision",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/univision-us.png"
+      },
+      {
+        "name": "Unimas",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/unimas-us.png"
+      },
+      {
+        "name": "Viaplay Sports 1 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/viaplay-sports-1-uk.png"
+      },
+      {
+        "name": "Viaplay Sports 2 UK",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-kingdom/viaplay-sports-2-uk.png"
+      },
+      {
+        "name": "Willow Cricket",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/willow-us.png"
+      },
+      {
+        "name": "YES Network USA",
+        "logo": "https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/yes-network-us.png"
       }
     ]
   }
