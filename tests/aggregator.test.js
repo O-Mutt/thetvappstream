@@ -541,6 +541,9 @@ test('a first source that hangs through the whole budget is blamed', async () =>
   assert.strictEqual(agg.explainSources('live:cnn').sources[0].consecutiveFailures, 1);
 });
 
+const REDZONE_LOGO =
+  'https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/united-states/nfl-red-zone-us.png';
+
 test('the same network from two providers is one linear channel with both as sources', async () => {
   const dl = new FakeProvider('daddylive', {
     linear: { 'ESPN USA': '44', 'NFL RedZone': '667' },
@@ -565,7 +568,8 @@ test('the same network from two providers is one linear channel with both as sou
     [
       // Name and group from the first provider listing it; logo from the first that has one.
       ['live:espn', 'ESPN USA', 'Live TV', 'https://l/espn.png'],
-      ['live:nfl-redzone', 'NFL RedZone', 'Live TV', ''],
+      // No source has a logo; the table's "NFL Red Zone" matches by network key.
+      ['live:nfl-redzone', 'NFL RedZone', 'Live TV', REDZONE_LOGO],
     ],
   );
   assert.deepStrictEqual(agg.streamIndex.get('live:nfl-redzone'), [
@@ -582,4 +586,17 @@ test('the same network from two providers is one linear channel with both as sou
   const xml = agg.getEpgXml();
   assert.strictEqual((xml.match(/<channel id="live:espn">/g) || []).length, 1);
   assert.match(xml, /<programme[^>]*channel="live:espn"[^>]*>\s*<title[^>]*>SportsCenter/);
+});
+
+test('a linear channel with no source logo takes the table logo by network key, in the M3U and the guide', async () => {
+  const espn = require('../channelLogos.json').channels.find(c => c.name === 'ESPN').logo;
+  const p = new FakeProvider('daddylive', {
+    linear: { 'ESPN USA': '44' },
+    epg: { items: [{ name: 'ESPN USA', chid: '44', logo: null }], programmesByChid: {} },
+  });
+  const agg = new Aggregator([p]);
+  const { linearEntries } = await agg.listM3uEntries();
+  assert.strictEqual(linearEntries[0].logo, espn);
+  await agg.refreshEpg();
+  assert.ok(agg.getEpgXml().includes(espn.replace(/&/g, '&amp;')), 'guide icon');
 });

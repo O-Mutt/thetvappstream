@@ -217,11 +217,33 @@ class Aggregator {
     );
   }
 
+  // channelLogos.json, indexed by display name and by network key, so "ESPN
+  // USA" finds the table's "ESPN". The file is static, so it is read once.
+  _logoIndex() {
+    if (!this._logos) {
+      this._logos = getChannelLogos()
+        .catch(() => ({ channels: [] }))
+        .then(({ channels = [] }) => {
+          const byName = new Map();
+          const byKey = new Map();
+          for (const c of channels) {
+            if (!c?.name || !c?.logo) continue;
+            byName.set(c.name, c.logo);
+            const key = networkKey(c.name);
+            if (key && !byKey.has(key)) byKey.set(key, c.logo);
+          }
+          return { byName, byKey };
+        });
+    }
+    return this._logos;
+  }
+
   // Every provider's linear channels, merged by network. Name and group come
   // from the first provider in PROVIDERS order that lists the network, the
-  // logo from the first that has one; sources keep that order, and ranking
-  // reorders them at tune time.
-  async _linearChannels(logoByName = new Map()) {
+  // logo from the first source that has one, else the logo table; sources
+  // keep that order, and ranking reorders them at tune time.
+  async _linearChannels() {
+    const logos = await this._logoIndex();
     const byKey = new Map();
     for (const p of this.providers) {
       let channels = {};
@@ -244,13 +266,16 @@ class Aggregator {
           };
           byKey.set(key, entry);
         }
-        if (!entry.logo) entry.logo = ch.logo || logoByName.get(ch.name) || '';
+        if (!entry.logo) entry.logo = ch.logo || logos.byName.get(ch.name) || '';
         if (!entry.sources.some(s => s.providerName === p.name && s.ref === ch.ref)) {
           entry.sources.push({ providerName: p.name, ref: ch.ref });
         }
       }
     }
     const all = [...byKey.values()];
+    for (const [key, entry] of byKey) {
+      if (!entry.logo) entry.logo = logos.byKey.get(key) || '';
+    }
     if (!this.linearFilter) {
       this.droppedLinear = [];
       return all;
@@ -269,12 +294,7 @@ class Aggregator {
   // reads. Returns { linearEntries, eventEntries } for formatting/tests.
   async listM3uEntries(base = '') {
     const index = new Map();
-    const logos = await getChannelLogos().catch(() => ({ channels: [] }));
-    const logoByName = new Map(
-      (logos.channels || []).filter(c => c?.name && c?.logo).map(c => [c.name, c.logo]),
-    );
-
-    const linearEntries = (await this._linearChannels(logoByName)).map(ch => {
+    const linearEntries = (await this._linearChannels()).map(ch => {
       index.set(ch.id, ch.sources);
       return { tvgId: ch.id, name: ch.name, group: ch.group, logo: ch.logo, streamId: ch.id };
     });
