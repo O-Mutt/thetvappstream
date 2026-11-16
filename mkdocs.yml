@@ -1,0 +1,13 @@
+site_name: StreamScraper
+site_description: Merges live sports and TV sources into one M3U playlist and XMLTV guide.
+repo_url: https://github.com/Tuatha-Tech-LLC/thetvappstream
+docs_dir: docs
+# No nav block: pages are discovered from docs/, so a new page needs no
+# registration here.
+theme:
+  name: material
+markdown_extensions:
+  - tables
+  - admonition
+  - toc:
+      permalink: true

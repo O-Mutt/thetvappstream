@@ -3,3 +3,6 @@ node_modules
 .claude-flow/
 newchannellogos.json
 updated.js
+
+# MkDocs / Zensical build output
+site/
