@@ -100,6 +100,8 @@ test('parseStreams splits games from 24/7 channels and keeps source quality', ()
 
   const [game, upcoming] = events;
   assert.strictEqual(game.league, 'UEFA Nations League');
+  assert.strictEqual(game.category, 'soccer');
+  assert.strictEqual(game.sport, 'soccer');
   assert.strictEqual(game.endSec - game.startSec, 135 * 60, 'soccer runs 2h15');
   assert.deepStrictEqual(game.streamRef, {
     ref: 'v:soccer/moldova-vs-faroe-islands1080p',

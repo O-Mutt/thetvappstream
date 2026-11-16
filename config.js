@@ -95,4 +95,8 @@ module.exports = {
   // on a tune after roughly a minute, and browser-backed sources take 10-30s
   // each, so an unbounded walk ends in a timeout instead of a stream.
   RESOLVE_BUDGET_MS: parsePositiveInt(process.env.RESOLVE_BUDGET_MS, 45 * 1000),
+  // Comma-separated sports and/or competitions to keep as event channels, e.g.
+  // "american-football,basketball,MLS,EPL,Boxing,UFC". Unset keeps every event.
+  // See EventFilter.js; what it drops is listed at /debug/dropped.
+  EVENT_FILTER: process.env.EVENT_FILTER || '',
 };

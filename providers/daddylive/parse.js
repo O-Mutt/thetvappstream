@@ -1,5 +1,6 @@
 const cheerio = require('cheerio');
 const { EVENT_DISPLAY_TZ } = require('../../config');
+const { sportFromLabel, inferSport } = require('../../sports');
 
 // Pure parsing for DaddyLive (dlhd) inputs: the 24-7 channel index and the
 // schedule JSON. No network or browser here so it stays deterministic and
@@ -31,6 +32,9 @@ const CATEGORY_LEAGUE = {
   darts: 'Darts',
   snooker: 'Snooker',
 };
+
+// dlhd's "Football" category is association football.
+const DLHD_SPORT_OVERRIDES = { football: 'soccer' };
 
 // Rough broadcast windows (minutes) for synthesizing event end times.
 const LEAGUE_DURATION_MIN = {
@@ -291,6 +295,9 @@ function parseSchedule(scheduleJson, opts = {}) {
 
         events.push({
           league,
+          category,
+          sport:
+            sportFromLabel(category, DLHD_SPORT_OVERRIDES) || inferSport({ league, name: matchup }),
           name: `${matchup} @ ${formatEventSuffix(startSec, displayTz)}`,
           startSec,
           endSec,

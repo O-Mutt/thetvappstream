@@ -17,6 +17,20 @@ const CATEGORY_DURATION_MIN = {
 };
 const DEFAULT_DURATION_MIN = 180;
 
+// StreamFree's own category ids. "football" is the NFL here, while dlhd and
+// PPV use the same word for soccer.
+const CATEGORY_SPORT = {
+  soccer: 'soccer',
+  basketball: 'basketball',
+  hockey: 'hockey',
+  baseball: 'baseball',
+  football: 'american-football',
+  combat: 'combat',
+  racing: 'motorsport',
+  tennis: 'tennis',
+  cricket: 'cricket',
+};
+
 // Refs carry their own kind so one resolveStream handles both:
 //   v:{category}/{variant}     one source, e.g. v:soccer/ghana-vs-england1080p2
 //   k:{category}/{stream_key}  whatever source is live for the stream right now
@@ -108,6 +122,8 @@ function parseStreams(
 
     events.push({
       league: s.league || s.category,
+      category: s.category,
+      sport: CATEGORY_SPORT[s.category] || 'other',
       name: `${s.name} @ ${formatEventSuffix(startSec, displayTz)}`,
       startSec,
       endSec,

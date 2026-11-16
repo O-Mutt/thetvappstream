@@ -80,6 +80,12 @@ app.get('/debug/sources/:id', (req, res) => {
   res.json(info);
 });
 
+// Events EVENT_FILTER removed on the last listing pass, with the labels the
+// filter saw, so a missing game can be traced to the entry that should match it.
+app.get('/debug/dropped', (_req, res) => {
+  res.json(aggregator.listDropped());
+});
+
 app.get('/hlsseg/:streamId', (req, res) => {
   hls.segment(req, res).catch(e => {
     console.error(`/hlsseg/${req.params.streamId}: ${e.message}`);
