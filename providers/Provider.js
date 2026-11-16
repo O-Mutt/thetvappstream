@@ -31,7 +31,12 @@ class Provider {
   }
 
   // Live sport events, normalized:
-  //   [{ league, name, startSec, endSec, streamRef, altStreamRefs?, logo }]
+  //   [{ league, name, startSec, endSec, streamRef, altStreamRefs?, logo,
+  //      sport?, category? }]
+  // `sport` is one of sports.SPORTS. Set it when the source's own category
+  // says which sport (its labels can be ambiguous: "football"); otherwise the
+  // aggregator infers it from category, league and name. `category` is the
+  // source's raw label, kept for EVENT_FILTER matching and /debug/dropped.
   // `name` is preserved verbatim downstream (the Dispatcharr scheduler parses
   // the "@ <time>" suffix out of it), so keep it human-readable.
   // streamRef / altStreamRefs entries are either a plain ref or

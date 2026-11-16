@@ -124,31 +124,62 @@ The floor is `MIN_VIDEO_HEIGHT` (default 720).
 - **Plain M3U sources:** channels from `M3U_SOURCES` are merged by the same
   key.
 
-### 5. Event allowlist (`EventFilter.js`, new)
+### 5. Event allowlist (`EventFilter.js`, `sports.js`)
 
-`EVENT_FILTER` is a comma-separated list of sports and/or leagues, for example
-`american-football,basketball,hockey,baseball,MLS,EPL,Boxing,UFC`. When it is
-unset, every event is kept, as today.
+`EVENT_FILTER` is a comma-separated list of sports and/or competitions, for
+example `american-football,basketball,hockey,baseball,MLS,EPL,Boxing,UFC`.
+When it is unset, every event is kept, as today. Linear channels are never
+filtered.
 
-- **Matching:** an event is kept when any entry matches its `sport`, its
-  `league`, its provider category, or a keyword in its name. Matching is
-  case-insensitive and ignores emoji and punctuation.
-- **Aliases:** each entry expands through an alias table:
+**Sport.** Every event gets a canonical `sport` (section 1). A provider sets it
+when its own category says which sport: StreamFree maps its category ids, and
+dlhd reads its category with `Football` overridden to soccer. Otherwise
+`sports.inferSport` reads the category, then the league, then the name, through
+a whole-word term table (`sports.SPORT_TERMS`). Narrow sports are checked
+first, so "Premier League Darts" is darts and "Indian Premier League" is
+cricket. `PPV` maps to `combat`, because pay-per-view cards on these sites are
+fights. Anything unrecognized is `other`.
 
-  | Entry    | Also matches                                                                                         |
-  | -------- | ---------------------------------------------------------------------------------------------------- |
-  | `Boxing` | sport `combat` with `boxing`, `matchroom`, `top rank`, `queensberry` or `dazn` in the name or league |
-  | `UFC`    | `ufc`, `ufc fight night`, `mma`, `pfl`                                                               |
-  | `NFL`    | `nfl`, `redzone`, `american football`                                                                |
-  | `soccer` | sport `soccer`, plus every named competition                                                         |
+**Entries.** Matching is case-insensitive, ignores emoji and punctuation, and
+works on whole words, so `NBA` does not match "WNBA".
 
-  The aliases live in code next to the existing league tables in
-  `eventLogos.js`, and are extended as labeling gaps show up in the dropped
-  list.
+- A **sport entry** (`basketball`, `american-football`, `ice hockey`,
+  `motorsports`, ...) keeps every event of that sport.
+- A **competition entry** keeps an event when:
+  1. one of its terms appears in the event's league, category or name, or
+  2. it and the event's league resolve to the same `canonicalLeague`, or
+  3. the event is in the entry's sport but its league and category name only
+     the sport ("Soccer", "Fight", "PPV", "combat", empty), and its name does
+     not contain a term of another competition of that sport.
 
-- **Dropped events:** each one is recorded with `provider`, `sport`, `league`,
-  raw `category` and `name`. The record is logged once per refresh and served
-  at `/debug/dropped`.
+  Rule 3 is what keeps a boxing card that a source filed as `combat` with no
+  league, while "UFC 320" under the same labels is still dropped by `Boxing`.
+  The cost is that a source that labels every game only "Soccer" (the-tv.app)
+  has all its soccer kept under `EPL`.
+
+- **Aliases** expand an entry's terms. They live in `EventFilter.ALIASES`:
+
+  | Entry              | Terms                                                                                     |
+  | ------------------ | ----------------------------------------------------------------------------------------- |
+  | `Boxing`           | boxing, matchroom, top rank, queensberry, dazn, golden boy, pbc, premier boxing champions |
+  | `UFC`, `MMA`       | ufc, ufc fight night, mma, pfl, bellator, one championship                                |
+  | `Wrestling`, `WWE` | wrestling, wwe, aew, raw, smackdown, nxt, tna                                             |
+  | `NFL`              | nfl, redzone, red zone, american football                                                 |
+  | `NCAAF`            | ncaaf, college football, ncaa football, cfb                                               |
+  | `NCAAB`            | ncaab, college basketball, ncaa basketball, march madness                                 |
+  | `EPL`              | epl, premier league, english premier league                                               |
+  | `MLS`              | mls, major league soccer                                                                  |
+  | `UCL`              | ucl, champions league                                                                     |
+  | `F1`               | f1, formula 1, formula one                                                                |
+
+  `NBA`, `WNBA`, `NHL`, `MLB` and `NASCAR` match their own name. Any other
+  entry matches its own words ("UEFA Nations League"). Extend the table when
+  `/debug/dropped` shows a labeling gap.
+
+**Dropped events.** Each one is recorded with `provider`, `sport`, `league`,
+raw `category` and `name`, served at `/debug/dropped`, and logged once when it
+first drops out (the listing is rebuilt on every M3U fetch, so logging every
+pass would repeat each line).
 
 ### 6. StreamFree provider (`providers/streamfree/`)
 
@@ -350,9 +381,10 @@ in ranking.
 - **Quality filter:** drops sub-floor variants only when a higher one
   remains; keeps variants with no `RESOLUTION`; serves the master-only
   rewrite for streams that need no headers.
-- **EventFilter:** alias expansion; the boxing-as-`combat` case; PPV
-  `Football` treated as soccer while StreamFree `football` is the NFL; dropped
-  events are recorded.
+- **EventFilter:** alias expansion; the boxing-as-`combat` case; a UFC card
+  under generic labels dropped by `Boxing`; dlhd `Football` treated as soccer
+  while StreamFree `football` is the NFL; whole-word matching; dropped events
+  are recorded and logged once.
 - **Linear dedupe:** normalization and aliases; merged sources; a stable
   `live:` id.
 - **StreamFree:** listing parse against a fixture of the `/api/v1/streams`

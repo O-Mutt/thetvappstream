@@ -451,3 +451,25 @@ test('parseScheduleHtml rolls a post-midnight event onto the next day', () => {
   assert.match(startIso(byName(events, 'Evening Game')), /^2026-06-08T23:40:00/);
   assert.match(startIso(byName(events, 'Wrapped Game')), /^2026-06-09T00:37:00/);
 });
+
+test('parseSchedule tags each event with its raw category and sport', () => {
+  const schedule = {
+    'Monday 8th June 2026 - Schedule Time UK GMT': {
+      'Football</span>': [
+        { time: '19:00', event: 'Arsenal vs Chelsea', channels: [{ channel_id: '1' }] },
+      ],
+      'Am. Football</span>': [
+        { time: '19:00', event: 'NFL : Bears vs Packers', channels: [{ channel_id: '2' }] },
+      ],
+      'Boxing</span>': [
+        { time: '19:00', event: 'Usyk vs Dubois', channels: [{ channel_id: '3' }] },
+      ],
+    },
+  };
+  const events = parseSchedule(schedule, { nowSec: NOW, displayTz: 'UTC' });
+  assert.deepStrictEqual(events.map(e => [e.category, e.sport]).sort(), [
+    ['Am. Football', 'american-football'],
+    ['Boxing', 'combat'],
+    ['Football', 'soccer'],
+  ]);
+});

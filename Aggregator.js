@@ -3,8 +3,10 @@ const { getChannelLogos } = require('./utils');
 const { canonicalKey, canonicalEventId, stripTime, sameGame } = require('./canonicalName');
 const { pickEventLogo, pickMatchupLogos } = require('./eventLogos');
 const { normalizeLeagueLabel, normalizeEventName, stripLeaguePrefix } = require('./displayName');
-const { PUBLIC_BASE_URL, STREAM_CACHE_MS, RESOLVE_BUDGET_MS } = require('./config');
+const { PUBLIC_BASE_URL, STREAM_CACHE_MS, RESOLVE_BUDGET_MS, EVENT_FILTER } = require('./config');
 const { SourceRanker, sourceKey } = require('./SourceRanker');
+const { createEventFilter } = require('./EventFilter');
+const { inferSport } = require('./sports');
 
 // streamRef / altStreamRefs entries are a bare ref or { ref, quality }.
 function normalizeRef(r) {
@@ -77,8 +79,12 @@ function normalizeLinear(channels) {
 // game, league as the group-title, "@ <time>" preserved in the name. That's
 // what keeps the recording scheduler provider-agnostic.
 class Aggregator {
-  constructor(providers) {
+  constructor(providers, { eventFilter = EVENT_FILTER } = {}) {
     this.providers = providers || [];
+    this.eventFilter = createEventFilter(eventFilter);
+    // Events EVENT_FILTER removed on the last listing pass, for /debug/dropped.
+    this.dropped = [];
+    this._droppedKeys = new Set();
     this._providerByName = new Map(this.providers.map(p => [p.name, p]));
     this.streamIndex = new Map(); // publicId -> [{ providerName, ref }]
     // publicId -> { stream, sourceKey, expires }. Players re-request the entry
@@ -124,6 +130,7 @@ class Aggregator {
   // returned entry carries the ordered fallback `sources`.
   async _dedupeEvents() {
     const byKey = new Map();
+    const dropped = [];
     for (const p of this.providers) {
       let events = [];
       try {
@@ -141,7 +148,12 @@ class Aggregator {
         // The source now bakes the league into the matchup too; without this the
         // guide title prepends it a second time ("MLB: MLB: Tigers vs ...").
         const name = stripLeaguePrefix(normalizeEventName(ev.name), league);
-        const normalized = { ...ev, league, name };
+        const sport = inferSport({ ...ev, league, name });
+        const normalized = { ...ev, league, name, sport };
+        if (this.eventFilter && !this.eventFilter.keep(normalized)) {
+          dropped.push({ provider: p.name, sport, league, category: ev.category ?? null, name });
+          continue;
+        }
         const key = canonicalKey(normalized);
         // Exact identity first; then the looser same-game test so a source that
         // spells a team differently, or rounds the start across a UTC midnight,
@@ -162,6 +174,7 @@ class Aggregator {
             id: canonicalEventId(normalized),
             name,
             league,
+            sport,
             logo:
               ev.logo || (matchup ? matchup.away : null) || pickEventLogo({ league, name }) || '',
             awayLogo: matchup ? matchup.away : null,
@@ -185,6 +198,7 @@ class Aggregator {
         }
       }
     }
+    this._recordDropped(dropped);
     // byKey can alias one bucket under several keys after a fuzzy match.
     return [...new Set(byKey.values())].sort(
       (a, b) => (a.startSec || 0) - (b.startSec || 0) || a.name.localeCompare(b.name),
@@ -421,6 +435,32 @@ class Aggregator {
 
   // Ranked sources for one channel with the reasons behind the order, for
   // /debug/sources. Null for an unknown id.
+  // _dedupeEvents runs on every M3U fetch and EPG build, so only events not
+  // already reported are logged.
+  _recordDropped(dropped) {
+    const keys = new Set();
+    for (const d of dropped) {
+      const key = `${d.provider}|${d.name}`;
+      keys.add(key);
+      if (!this._droppedKeys.has(key)) {
+        console.log(
+          `[filter] dropped ${d.provider} event "${d.name}" ` +
+            `(sport=${d.sport}, league=${d.league}, category=${d.category ?? '-'})`,
+        );
+      }
+    }
+    this._droppedKeys = keys;
+    this.dropped = dropped;
+  }
+
+  listDropped() {
+    return {
+      filter: this.eventFilter ? this.eventFilter.entries : null,
+      count: this.dropped.length,
+      dropped: this.dropped,
+    };
+  }
+
   explainSources(publicId) {
     const sources = this.streamIndex.get(publicId);
     if (!sources) return null;
