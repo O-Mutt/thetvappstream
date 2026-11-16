@@ -27,12 +27,14 @@ module.exports = {
     // PROVIDERS=none runs only the M3U_SOURCES feeds.
     .filter(s => s && s.toLowerCase() !== 'none'),
   TV_URL: process.env.TV_URL || 'https://thetvapp.to',
-  // Ordered mirror list for the thetvapp source. The original thetvapp.to backend
-  // was taken down (June 2026); the app relocated to the-tv.app (same brand, new
-  // site structure — event-only, JS player). Domains rotate, so list known
-  // alternates and the resolver fails over to the first live one. Deliberately
-  // NOT chained off the dead TV_URL anymore.
-  THETVAPP_URLS: (process.env.THETVAPP_URLS || 'https://the-tv.app,https://thetvapp.link')
+  // Ordered mirror list for the thetvapp source. thetvapp.to went down in June
+  // 2026 and the app moved to the-tv.app, whose certificate expired in Nov 2026;
+  // it now runs at thetvapp.plus. Domains rotate, so known alternates stay
+  // listed and the resolver fails over to the first live one. Deliberately NOT
+  // chained off the dead TV_URL.
+  THETVAPP_URLS: (
+    process.env.THETVAPP_URLS || 'https://thetvapp.plus,https://the-tv.app,https://thetvapp.link'
+  )
     .split(',')
     .map(s => s.trim())
     .filter(Boolean),

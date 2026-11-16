@@ -60,13 +60,14 @@ class TheTvAppProvider extends Provider {
     return this.mirrors.active();
   }
 
-  // A live mirror serves a league page with the list-group event index.
+  // A live mirror serves a league page with game links, in either the card
+  // markup (thetvapp.plus) or the older list-group markup.
   async _probe(url) {
     for (const path of PROBE_PATHS) {
       try {
         const r = await this.client.get(`${url}${path}`, { headers: { Referer: `${url}/` } });
         const body = String(r.data || '');
-        if (r.status === 200 && /list-group-item/.test(body) && /\/tv-live\//.test(body)) {
+        if (r.status === 200 && parseLeagueListing(body, '').length > 0) {
           return true;
         }
       } catch {

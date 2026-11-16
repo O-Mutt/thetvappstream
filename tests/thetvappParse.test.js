@@ -87,3 +87,46 @@ test('LEAGUE_BY_PATH maps cfb -> NCAAF and covers the nav tabs', () => {
   assert.strictEqual(LEAGUE_BY_PATH['/watch/mlb-streams'], 'MLB');
   assert.strictEqual(Object.keys(LEAGUE_BY_PATH).length, 11);
 });
+
+// thetvapp.plus league page, Nov 2026, trimmed.
+const CARDS = `
+<section class="games" data-game-group="live">
+  <a class="game" data-league-id="320" data-game data-sport="NBA" data-status="live"
+     data-search="Boston Celtics vs Orlando Magic NBA" href="https://thetvapp.plus/tv-live/nba/orlando-magic-boston-celtics/9276190672">
+    <span class="league-tag"><span class="sport-icon" aria-hidden="true">🏀</span>NBA</span>
+    <span class="matchup">Boston Celtics vs Orlando Magic</span>
+    <span><span class="badge-time">7:00 PM ET</span><small class="d-block">Nov 16</small></span>
+    <span class="watch">Watch</span>
+  </a>
+</section>
+<section class="games" data-game-group="soon">
+  <a class="game" data-game data-sport="NBA" data-status="soon" href="https://thetvapp.plus/tv-live/nba/denver-nuggets-phoenix-suns/9276230264">
+    <span class="matchup">Phoenix Suns vs Denver Nuggets</span>
+    <span><span class="badge-time">9:00 PM ET</span><small class="d-block">Nov 16</small></span>
+  </a>
+  <a class="game" data-status="final" href="/tv-live/nba/a-b/1"><span class="matchup">A vs B</span></a>
+  <a class="game" data-status="soon" href="/tv-live/nba/no-matchup/2"></a>
+</section>`;
+
+test('parseLeagueListing reads thetvapp.plus game cards', () => {
+  const rows = parseLeagueListing(CARDS, 'NBA');
+  assert.deepStrictEqual(rows, [
+    {
+      href: '/tv-live/nba/orlando-magic-boston-celtics/9276190672',
+      matchup: 'Boston Celtics vs Orlando Magic',
+      timeText: 'In Progress',
+      league: 'NBA',
+    },
+    {
+      href: '/tv-live/nba/denver-nuggets-phoenix-suns/9276230264',
+      matchup: 'Phoenix Suns vs Denver Nuggets',
+      timeText: 'Nov 16 9:00 PM ET',
+      league: 'NBA',
+    },
+    { href: '/tv-live/nba/a-b/1', matchup: 'A vs B', timeText: 'Final', league: 'NBA' },
+  ]);
+  // A live card counts as started; a dated one defers to the watch page.
+  assert.strictEqual(parseRelativeStartSec(rows[0].timeText, 100), 100);
+  assert.strictEqual(parseRelativeStartSec(rows[1].timeText, 100), null);
+  assert.ok(isEndedBadge(rows[2].timeText));
+});

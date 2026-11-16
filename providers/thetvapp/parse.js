@@ -43,13 +43,42 @@ const PLAYLIST_RE =
 // that resumes, and dropping it lost the channel mid-broadcast.
 const ENDED_RE = /\b(final|ended|full[\s-]?time|ft|postponed|cancell?ed|abandoned)\b/i;
 
-// Each league page is an <ol class="list-group"> of
+// thetvapp.plus (Nov 2026) renders each game as a card:
+//   <a class="game" data-status="soon|live|hot" href=".../tv-live/<league>/<matchup>/<id>">
+//     <span class="matchup">Away vs Home</span>
+//     <span class="badge-time">7:00 PM ET</span><small>Nov 16</small>
+//   </a>
+// The card's time has no year, so it is passed on as text and the watch
+// page's absolute time decides the start, as for the older markup.
+function cardTimeText(a, status) {
+  if (status === 'live') return 'In Progress';
+  if (ENDED_RE.test(status)) return 'Final';
+  return [a.find('small').first().text(), a.find('.badge-time').first().text()]
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Older mirrors (the-tv.app) list games as an <ol class="list-group"> of
 //   <a class="list-group-item" href="/tv-live/<league>/<matchup>/<id>">
 //     Away vs Home: <span class="time-badge">In Progress</span> HD
 //   </a>
 function parseLeagueListing(html, league) {
   const $ = cheerio.load(html || '');
   const out = [];
+  $('a.game[href*="/tv-live/"]').each((_, el) => {
+    const a = $(el);
+    const href = a.attr('href');
+    const matchup = a.find('.matchup').first().text().replace(/\s+/g, ' ').trim();
+    if (!href || !matchup) return;
+    const status = String(a.attr('data-status') || '').toLowerCase();
+    out.push({
+      href: href.replace(/^https?:\/\/[^/]+/, ''),
+      matchup,
+      timeText: cardTimeText(a, status),
+      league,
+    });
+  });
   $('a.list-group-item[href*="/tv-live/"]').each((_, el) => {
     const a = $(el);
     const href = a.attr('href');
