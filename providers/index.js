@@ -2,6 +2,7 @@ const { PROVIDERS, ENABLE_EVENT_STREAMS, M3U_SOURCES } = require('../config');
 const Aggregator = require('../Aggregator');
 const TheTvAppProvider = require('./thetvapp');
 const DaddyLiveProvider = require('./daddylive');
+const StreamFreeProvider = require('./streamfree');
 const M3uProvider = require('./m3u');
 const { parseM3uSources } = require('./m3u/parse');
 
@@ -11,6 +12,7 @@ const { parseM3uSources } = require('./m3u/parse');
 const REGISTRY = {
   thetvapp: () => new TheTvAppProvider({ enableEvents: ENABLE_EVENT_STREAMS }),
   daddylive: () => new DaddyLiveProvider(),
+  streamfree: () => new StreamFreeProvider(),
 };
 
 // One provider per M3U_SOURCES entry, appended after the PROVIDERS list (they

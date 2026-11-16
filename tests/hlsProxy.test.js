@@ -314,3 +314,76 @@ test('serveFilteredMaster declines when there is nothing to filter', () => {
   assert.strictEqual(hls.serveFilteredMaster(res, { url: 'u', manifest: media }), false);
   assert.strictEqual(hls.serveFilteredMaster(res, { url: 'u', manifest: null }), false);
 });
+
+const { splitFallback } = require('../hlsProxy');
+
+const SF_PRIMARY = 'https://p16.tiktokcdn.example/seg/abc.js';
+const SF_OWN = 'https://cdn1.strmfree.example/live-externalcdn/x1080p/seg-5.js?_t=a&_e=1';
+const SF_LINE = `${SF_PRIMARY}#sf=${encodeURIComponent(SF_OWN)}`;
+
+test('splitFallback separates a "#sf=" primary from its decoded fallback', () => {
+  assert.deepStrictEqual(splitFallback(SF_LINE), { primary: SF_PRIMARY, fallback: SF_OWN });
+  assert.strictEqual(splitFallback('https://cdn.x/a.ts'), null);
+  assert.strictEqual(splitFallback(`${SF_PRIMARY}#sf=not-a-url`), null);
+});
+
+test('rewriteManifest keeps the "#sf=" fallback inside the proxied url', () => {
+  const out = rewriteManifest(`#EXTM3U\n#EXTINF:4,\n${SF_LINE}\n`, MANIFEST_URL, BASE, SID);
+  const line = out.split('\n').find(l => l.includes('/hlsseg/'));
+  assert.strictEqual(new URL(line).searchParams.get('u'), SF_LINE);
+});
+
+function recordingSegmentHandler(byUrl) {
+  const calls = [];
+  const hls = createHlsHandlers({
+    lookupHeaders: () => ({ Referer: 'https://embed/' }),
+    baseUrlFor: () => BASE,
+    http: {
+      get: async url => {
+        calls.push(url);
+        const r = byUrl[url];
+        if (r instanceof Error) throw r;
+        return {
+          status: r.status,
+          headers: { 'content-type': 'video/mp2t' },
+          data: Readable.from([Buffer.from(r.body || '')]),
+          request: {},
+        };
+      },
+    },
+  });
+  return { hls, calls };
+}
+
+async function fetchSegment(hls, u) {
+  const res = fakeRes();
+  const done = res.body();
+  await hls.segment({ params: { streamId: SID }, query: { u }, headers: {} }, res);
+  return { status: res.statusCode, body: await done };
+}
+
+test('segment falls back to the "#sf=" url when the primary is refused', async () => {
+  const { hls, calls } = recordingSegmentHandler({
+    [SF_PRIMARY]: { status: 403 },
+    [SF_OWN]: { status: 200, body: 'own-cdn' },
+  });
+  const out = await fetchSegment(hls, SF_LINE);
+  assert.deepStrictEqual(calls, [SF_PRIMARY, SF_OWN]);
+  assert.strictEqual(out.body, 'own-cdn');
+});
+
+test('segment falls back to the "#sf=" url when the primary errors', async () => {
+  const { hls } = recordingSegmentHandler({
+    [SF_PRIMARY]: new Error('ETIMEDOUT'),
+    [SF_OWN]: { status: 200, body: 'own-cdn' },
+  });
+  assert.strictEqual((await fetchSegment(hls, SF_LINE)).body, 'own-cdn');
+});
+
+test('segment uses the "#sf=" primary when it answers', async () => {
+  const { hls, calls } = recordingSegmentHandler({
+    [SF_PRIMARY]: { status: 200, body: 'tiktok' },
+  });
+  assert.strictEqual((await fetchSegment(hls, SF_LINE)).body, 'tiktok');
+  assert.deepStrictEqual(calls, [SF_PRIMARY]);
+});

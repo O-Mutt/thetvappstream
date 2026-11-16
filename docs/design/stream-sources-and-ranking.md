@@ -199,12 +199,34 @@ asks clients to cache this, so it is refreshed no more than every 5 minutes.
 - `GET /streams` (not under `/api/v1`) also returns `team1.logo` and
   `team2.logo` as ESPN URLs, which are useful for artwork.
 
-**Events**
+**Events and channels**
 
-- Each stream with at least one source becomes one event.
-- The start is `match_timestamp`. The end is the start plus a per-sport
-  default: 3 h, or 2 h 15 min for soccer.
-- Each source becomes a ref `{category}/{variant}` with a quality hint.
+The listing mixes games with 24/7 channels (RedZone, Sky Sports Tennis, Sky
+Sports Cricket, Sky Sports F1, Willow).
+
+- A stream is a **linear channel** when its `match_timestamp` is more than
+  24 h old and its `id` is a UUID rather than its `stream_key`. Channels keep
+  the date the operator created them as their timestamp, and auto-created
+  games reuse the stream key as their id. Requiring both stops a stale game
+  that was never removed from turning into a permanent channel. Channels are
+  listed even while they have no source, so the channel list stays stable.
+  `STREAMFREE_ENABLE_LINEAR=false` drops them.
+- Every other stream is an **event** while it is inside the usual window
+  (ended no more than 45 min ago, starting within 36 h).
+- The start is `match_timestamp`. The end is the start plus a per-category
+  default: soccer 2 h 15 min; basketball and hockey 2 h 30 min; baseball and
+  football 3 h 30 min; combat and cricket 4 h; anything else 3 h.
+
+Refs carry their kind:
+
+| Ref                         | Used for                           | Resolves to                                                     |
+| --------------------------- | ---------------------------------- | --------------------------------------------------------------- |
+| `v:{category}/{variant}`    | each listed source of a game       | that source, with its quality as the ranking hint               |
+| `k:{category}/{stream_key}` | channels; games with no source yet | the highest live source from `GET /api/v1/sources/{stream_key}` |
+
+Games are often listed before StreamFree attaches a source. The `k:` ref
+means such a game still plays once a source goes live, even if no listing
+refresh happens in between.
 
 **Resolving a ref**
 
@@ -230,19 +252,25 @@ asks clients to cache this, so it is refreshed no more than every 5 minutes.
    `/live-externalcdn/` returned 200 with no headers.
 
 4. Return `{ url, headers: { Referer: 'https://{embed host}/', Origin: 'https://{embed host}' }, quality: { height } }`.
+   All requests after the embed go to the mirror that served it, because
+   that mirror issued the tokens.
    The headers are required for segments. A segment request with no headers
    returned 403; with them it returned 200 `video/mp2t`.
 
 **Segments**
 
 - Each quality is its own media playlist. There is no master playlist.
-- Segment URLs end in `.js`, but the content is plain MPEG-TS. In testing it
-  was H.264 1920x1080 with AAC audio. No unwrapping is needed.
-- On `externalcdn`, the site's player treats a segment line of the form
-  `<tiktok url>#sf=<url-encoded own-cdn url>` as a primary URL plus a fallback.
-  `/hlsseg` should fetch the part before `#sf=` and fall back to the decoded
-  URL after it. This was not observed in testing (the server was `cdn`), so it
-  is unverified.
+- On `cdn` and `origin`, segment URLs end in `.js`, but the content is plain
+  MPEG-TS. In testing it was H.264 1920x1080 with AAC audio.
+- On `externalcdn` (RedZone on 2026-11-16), each segment line has the form
+  `<tiktok url>#sf=<url-encoded own-cdn url>`: a TikTok-hosted copy first,
+  StreamFree's own CDN as the fallback. HTTP drops the fragment, so `/hlsseg`
+  splits the line itself. It fetches the TikTok copy first and falls back to
+  the decoded URL on an error or a non-2xx answer.
+- The TikTok copy is a 1x1 PNG with the whole MPEG-TS segment in a private
+  `tsDa` chunk. `segmentUnwrap.js` returns that chunk as `video/mp2t`, beside
+  the existing dlhd pixel-packed (`TIKTIKPX`) format. Verified 2026-11-16:
+  H.264 1920x1080 with AAC.
 
 **Cost:** `http`.
 
@@ -301,13 +329,14 @@ Both are read-only JSON.
 
 ## Configuration
 
-| Var                 | Default                                                          | Notes                                                                  |
-| ------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `MIN_VIDEO_HEIGHT`  | `720`                                                            | Quality floor for ranking and master-playlist filtering. `0` disables. |
-| `RESOLVE_BUDGET_MS` | `45000`                                                          | Total time a tune may spend trying sources.                            |
-| `EVENT_FILTER`      | _(unset: keep all)_                                              | Sports and/or leagues to keep. See section 5.                          |
-| `STREAMFREE_URLS`   | `https://strmfree.st,https://strmfree.pk,https://streamfree.top` | Used when the mirror directory is unreachable.                         |
-| `PPV_API_URLS`      | `https://api.ppv.st,https://api.ppv.cx`                          | Listing API hosts, in order.                                           |
+| Var                        | Default                                                          | Notes                                                                  |
+| -------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `MIN_VIDEO_HEIGHT`         | `720`                                                            | Quality floor for ranking and master-playlist filtering. `0` disables. |
+| `RESOLVE_BUDGET_MS`        | `45000`                                                          | Total time a tune may spend trying sources.                            |
+| `EVENT_FILTER`             | _(unset: keep all)_                                              | Sports and/or leagues to keep. See section 5.                          |
+| `STREAMFREE_URLS`          | `https://strmfree.st,https://strmfree.pk,https://streamfree.top` | Used when the mirror directory is unreachable.                         |
+| `STREAMFREE_ENABLE_LINEAR` | `true`                                                           | Set `false` to take StreamFree games only, without its 24/7 channels.  |
+| `PPV_API_URLS`             | `https://api.ppv.st,https://api.ppv.cx`                          | Listing API hosts, in order.                                           |
 
 `PROVIDERS` gains `streamfree` and `ppv`. Provider order now only breaks ties
 in ranking.
@@ -327,8 +356,10 @@ in ranking.
 - **Linear dedupe:** normalization and aliases; merged sources; a stable
   `live:` id.
 - **StreamFree:** listing parse against a fixture of the `/api/v1/streams`
-  response; `_0x` token extraction from a fixture embed page; playlist URL for
-  each `server_name`; required headers are present.
+  response, including the game/channel split; `_0x` token extraction from a
+  fixture embed page; playlist URL for each `server_name`; required headers
+  are present; `k:` refs pick the highest live source; the `#sf=` fallback;
+  the `tsDa` unwrap.
 - **PPV:** listing parse against a fixture; linear versus event split; sport
   mapping; the `at` separator.
 
@@ -349,10 +380,10 @@ Each step is a separate PR.
    break. Linear channels move to `live:<network>`. The release notes for
    step 4 must tell operators to remap linear channels in Plex and Dispatcharr
    and to re-check any recording rule keyed on a linear channel id.
-2. **StreamFree non-matchup entries** (`redzone`, `skyf1`, `willow`,
-   `skysportstennis`): are they always listed, which would make them linear
-   channels, or only around events? Watch the listing over a few days before
-   deciding.
+2. ~~**StreamFree non-matchup entries**~~ Decided 2026-11-16: they are
+   linear channels. They stay listed with no source attached (Sky Sports F1
+   and Willow had none on 2026-11-16), and their ids are UUIDs with creation
+   dates months old. See section 6.
 3. **PPV terms:** its API says "contact us". Using it is a policy call.
 4. **Failover during playback:** once a proxied stream is playing, a source
    that dies mid-game is only replaced when the player reloads the channel URL.
