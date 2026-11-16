@@ -180,6 +180,7 @@ test('the aggregator drops filtered events, records their labels and logs each o
         name: 'Trump vs Robertson',
       },
     ],
+    linear: { filter: null, count: 0, dropped: [] },
   });
 
   await agg.listM3uEntries();
@@ -192,5 +193,10 @@ test('without a filter nothing is dropped', async () => {
     { eventFilter: '' },
   );
   assert.strictEqual((await agg.listM3uEntries()).eventEntries.length, 1);
-  assert.deepStrictEqual(agg.listDropped(), { filter: null, count: 0, dropped: [] });
+  assert.deepStrictEqual(agg.listDropped(), {
+    filter: null,
+    count: 0,
+    dropped: [],
+    linear: { filter: null, count: 0, dropped: [] },
+  });
 });

@@ -106,4 +106,9 @@ module.exports = {
   // "american-football,basketball,MLS,EPL,Boxing,UFC". Unset keeps every event.
   // See EventFilter.js; what it drops is listed at /debug/dropped.
   EVENT_FILTER: process.env.EVENT_FILTER || '',
+  // Comma-separated 24/7 networks to keep, e.g. "ESPN,ESPNU,NFL Network,
+  // RedZone,Sky Sports". An entry keeps its whole family ("ESPN" keeps ESPN 2);
+  // "=ESPN" keeps one network. Unset keeps every channel. See linearFilter.js;
+  // what it drops is listed at /debug/dropped.
+  LINEAR_FILTER: process.env.LINEAR_FILTER || '',
 };
