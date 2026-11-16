@@ -129,7 +129,9 @@ function parseWatchPage(html) {
 }
 
 function parseEmbedPlaylist(html, embedOrigin) {
-  const m = PLAYLIST_RE.exec(String(html || ''));
+  // thetvapp.plus's embed writes the URL as a JSON string with escaped
+  // slashes: SOURCE = "https:\/\/host\/playlist\/60250\/load-playlist-multi".
+  const m = PLAYLIST_RE.exec(String(html || '').replace(/\\\//g, '/'));
   if (!m) return null;
   let url = m[1];
   if (url.startsWith('//')) url = `https:${url}`;

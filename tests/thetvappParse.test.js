@@ -130,3 +130,12 @@ test('parseLeagueListing reads thetvapp.plus game cards', () => {
   assert.strictEqual(parseRelativeStartSec(rows[1].timeText, 100), null);
   assert.ok(isEndedBadge(rows[2].timeText));
 });
+
+test('parseEmbedPlaylist reads the JSON-escaped SOURCE of thetvapp.plus embeds', () => {
+  const html =
+    '<script>\n  const SOURCE       = "https:\\/\\/chatgpt.hereisman.net\\/playlist\\/60250\\/load-playlist-multi";\n</script>';
+  assert.strictEqual(
+    parseEmbedPlaylist(html, 'https://gooz.aapmains.net'),
+    'https://chatgpt.hereisman.net/playlist/60250/load-playlist-multi',
+  );
+});
