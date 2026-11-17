@@ -5,7 +5,7 @@ Dispatcharr, Plex Live TV and Jellyfin: one channel per game or network, the
 best available stream first, and failover to the next source during playback.
 
 ```bash
-docker run -d -p 5000:5000 ghcr.io/tuatha-tech-llc/thetvappstream:latest
+docker run -d -p 5000:5000 ghcr.io/o-mutt/thetvappstream:latest
 ```
 
 Documentation lives in [`docs/`](docs/index.md):

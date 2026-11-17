@@ -29,8 +29,8 @@ env:
 jobs:
   build:
     name: 'Build & Push'
-    # GitHub-hosted: the org's self-hosted runner group doesn't serve public
-    # repos, and opening it would let fork PRs run code on those machines.
+    # GitHub-hosted on purpose: the repo is public, so a self-hosted runner
+    # would let fork PRs run code on that machine.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
