@@ -13,7 +13,11 @@ Chromium is only needed for DaddyLive: `npx playwright install chromium`.
 CI runs lint, the format check and the tests on every pull request
 (`.github/workflows/lint.yml`). The Docker image is built for pull requests
 that touch it and pushed to GHCR on merges to `main`
-(`.github/workflows/docker.yml`).
+(`.github/workflows/docker.yml`) as `ghcr.io/tuatha-tech-llc/thetvappstream`,
+tagged `latest` and with the short commit SHA. Both workflows run on
+GitHub-hosted runners: the org's self-hosted runners don't serve public
+repositories, and they shouldn't, since a pull request from a fork could run
+code on them.
 
 ## Layout
 
