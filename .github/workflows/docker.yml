@@ -29,7 +29,9 @@ env:
 jobs:
   build:
     name: 'Build & Push'
-    runs-on: [self-hosted, Linux]
+    # GitHub-hosted on purpose: the repo is public, so a self-hosted runner
+    # would let fork PRs run code on that machine.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

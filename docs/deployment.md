@@ -12,7 +12,7 @@ docker run -d \
   -e PUBLIC_BASE_URL=https://streams.example.com \
   -e PROVIDERS=thetvapp,streamfree,daddylive \
   -e LINEAR_FILTER='ESPN,ESPNU,FS1,NFL Network,RedZone,NBA TV,Sky Sports' \
-  ghcr.io/tuatha-tech-llc/thetvappstream:latest
+  ghcr.io/o-mutt/thetvappstream:latest
 ```
 
 - The image bundles Chromium for DaddyLive. It starts only when a DaddyLive

@@ -22,7 +22,7 @@ available:
 docker run -d --name streamscraper --restart unless-stopped \
   -p 5000:5000 \
   -e PUBLIC_BASE_URL=http://192.168.1.10:5000 \
-  ghcr.io/tuatha-tech-llc/thetvappstream:latest
+  ghcr.io/o-mutt/thetvappstream:latest
 ```
 
 Then point your middleware at `http://<host>:5000/channels.m3u` (playlist) and
